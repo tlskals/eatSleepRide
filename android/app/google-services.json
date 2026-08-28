@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "239117471945",
+    "project_id": "eatsleepride-bdd5f",
+    "storage_bucket": "eatsleepride-bdd5f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:239117471945:android:10fc62765382a3ce253d18",
+        "android_client_info": {
+          "package_name": "com.example.project_t"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDo7I278QyT2B8D2FRc_j-wWV9Pr7s-430"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
