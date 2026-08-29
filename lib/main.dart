@@ -3,9 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
+import 'services/firebase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,7 +40,6 @@ class MyApp extends StatelessWidget {
 // -------------------------------------------------------------
 // 🏂 대형 브랜드 스플래시 화면 (선명한 로고 & 문구)
 // -------------------------------------------------------------
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -62,6 +60,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
     _fadeAnimation = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
     _animController.forward();
+
+    // 🚀 파이어베이스 익명 인증 및 유저 프로필 초기화 + 데이터 시딩
+    AppFirebaseService.instance.initUserAuthAndProfile().then((_) {
+      AppFirebaseService.instance.seedInitialDataIfEmpty(gRidePosts, gRideReviews);
+    });
 
     // 사용자가 로고와 안내 문구를 여유 있게 인지할 수 있도록 1.8초 동안 유지
     Timer(const Duration(milliseconds: 1800), () {
@@ -1118,6 +1121,37 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0; // 홈 탭 기본 활성화
   int _hubSubTabIndex = 0;
+  StreamSubscription<List<RidePost>>? _postsSubscription;
+  StreamSubscription<List<RideReview>>? _reviewsSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // 🌐 실시간 모집글 스트림 구독
+    _postsSubscription = AppFirebaseService.instance.streamRidePosts().listen((posts) {
+      if (mounted && posts.isNotEmpty) {
+        setState(() {
+          gRidePosts = posts;
+        });
+      }
+    });
+
+    // 🌐 실시간 설질 후기 피드 스트림 구독
+    _reviewsSubscription = AppFirebaseService.instance.streamReviews().listen((reviews) {
+      if (mounted && reviews.isNotEmpty) {
+        setState(() {
+          gRideReviews = reviews;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _postsSubscription?.cancel();
+    _reviewsSubscription?.cancel();
+    super.dispose();
+  }
 
   void _navigateToTab(int tabIndex, {int subTabIndex = 0}) {
     setState(() {
@@ -2991,7 +3025,10 @@ class _RideReviewListViewState extends State<RideReviewListView> {
           ElevatedButton(
             onPressed: () {
               setState(() {
-                gCurrentUser?.blockUser(nickname);
+                if (gCurrentUser != null) {
+                  gCurrentUser!.blockUser(nickname);
+                  AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
+                }
               });
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -3250,6 +3287,12 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                               review.isBlinded = true;
                             }
                           });
+
+                          // 🚨 Firestore 실시간 신고 및 3회 자동 블라인드 저장
+                          if (review.id.isNotEmpty) {
+                            AppFirebaseService.instance.reportReview(review.id, currentUserId);
+                          }
+
                           if (review.shouldHide) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -3576,7 +3619,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
     }
 
     final newReview = RideReview(
-      id: 'rev_${DateTime.now().millisecondsSinceEpoch}',
+      id: '',
       authorName: gCurrentUser?.nickname ?? '익명의 라이더',
       resortName: _selectedResort.name,
       snowCondition: _selectedSnowCondition,
@@ -3590,6 +3633,8 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
       commentCount: 0,
     );
 
+    // 🚀 Firestore 클라우드에 실시간 후기 저장
+    AppFirebaseService.instance.createReview(newReview);
     gRideReviews.insert(0, newReview);
 
     Navigator.pop(context);
@@ -3600,7 +3645,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
           children: [
             Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
             SizedBox(width: 8),
-            Text('후기가 성공적으로 등록되었습니다! 🎿'),
+            Text('후기가 성공적으로 등록되었습니다! 🎿 (+100P 지급)'),
           ],
         ),
       ),
@@ -4637,6 +4682,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           setState(() {
                             user.nickname = newName;
                           });
+                          AppFirebaseService.instance.saveUserProfile(user);
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -4847,6 +4893,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         setState(() {
                           user.homeResort = resort.shortName;
                         });
+                        AppFirebaseService.instance.saveUserProfile(user);
                         Navigator.pop(context);
                       },
                     );
@@ -5551,6 +5598,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   setState(() {
                     user.preferredDiscipline = val;
                   });
+                  AppFirebaseService.instance.saveUserProfile(user);
                 }
               },
             ),
@@ -5575,6 +5623,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   setState(() {
                     user.level = val;
                   });
+                  AppFirebaseService.instance.saveUserProfile(user);
                 }
               },
             ),
@@ -5647,6 +5696,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 setModalState(() {
                                   user.unblockUser(name);
                                 });
+                                AppFirebaseService.instance.saveUserProfile(user);
                                 setState(() {});
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
@@ -6070,11 +6120,12 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
   }
 
   void _executeJoinRide() {
+    final myNickname = gCurrentUser?.nickname ?? '익명의 라이더';
     setState(() {
       widget.post.isJoined = true;
       widget.post.currentMembers += 1;
-      if (gCurrentUser != null && !widget.post.participantNames.contains(gCurrentUser!.nickname)) {
-        widget.post.participantNames.add(gCurrentUser!.nickname);
+      if (!widget.post.participantNames.contains(myNickname)) {
+        widget.post.participantNames.add(myNickname);
       }
       widget.post.chatMessages.add(
         ChatMessage(
@@ -6085,6 +6136,11 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
         ),
       );
     });
+
+    // 🚀 Firestore 실시간 참여 동기화
+    if (widget.post.id.isNotEmpty) {
+      AppFirebaseService.instance.toggleJoinRidePost(widget.post.id, myNickname);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -6108,7 +6164,10 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              gCurrentUser?.blockUser(widget.post.authorName);
+              if (gCurrentUser != null) {
+                gCurrentUser!.blockUser(widget.post.authorName);
+                AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
+              }
               Navigator.pop(context);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -6178,6 +6237,12 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                           post.isBlinded = true;
                         }
                       });
+
+                      // 🚨 Firestore 실시간 신고 및 3회 자동 블라인드 저장
+                      if (post.id.isNotEmpty) {
+                        AppFirebaseService.instance.reportRidePost(post.id, currentUserId);
+                      }
+
                       if (post.shouldHide) {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -6425,20 +6490,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       return;
     }
 
-    final String myRole = widget.post.purpose.contains('랜덤')
-        ? '나'
-        : (widget.post.isAuthor ? '나 (방장)' : '나 (참가자)');
+    final myNickname = gCurrentUser?.nickname ?? '익명의 라이더';
+    final newMsg = ChatMessage(
+      sender: myNickname,
+      text: text,
+      time: DateTime.now(),
+      isMe: true,
+    );
 
     setState(() {
-      widget.post.chatMessages.add(
-        ChatMessage(
-          sender: myRole,
-          text: text,
-          time: DateTime.now(),
-          isMe: true,
-        ),
-      );
+      widget.post.chatMessages.add(newMsg);
     });
+
+    // 🚀 Firestore 실시간 메시지 전송
+    if (widget.post.id.isNotEmpty) {
+      AppFirebaseService.instance.sendChatMessage(widget.post.id, newMsg);
+    }
 
     _msgController.clear();
 
@@ -6514,6 +6581,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                                 gCurrentUser?.unblockUser(name);
                               } else {
                                 gCurrentUser?.blockUser(name);
+                              }
+                              if (gCurrentUser != null) {
+                                AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
                               }
                             });
                             Navigator.pop(context);
@@ -6609,7 +6679,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             child: Row(
               children: [
                 const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF2563EB)),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '참가 승인된 인원만 입장 가능한 대화방입니다. 만남 위치나 복장을 안전하게 조율하세요!',
@@ -6620,58 +6690,69 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: widget.post.chatMessages.length,
-              itemBuilder: (context, index) {
-                final msg = widget.post.chatMessages[index];
+            child: StreamBuilder<List<ChatMessage>>(
+              stream: widget.post.id.isNotEmpty
+                  ? AppFirebaseService.instance.streamChatMessages(widget.post.id)
+                  : const Stream.empty(),
+              builder: (context, snapshot) {
+                final displayMessages = (snapshot.hasData && snapshot.data!.isNotEmpty)
+                    ? snapshot.data!
+                    : widget.post.chatMessages;
 
-                if (msg.isSystem) {
-                  return Center(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        msg.text,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.4),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: displayMessages.length,
+                  itemBuilder: (context, index) {
+                    final msg = displayMessages[index];
 
-                return Align(
-                  alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                    decoration: BoxDecoration(
-                      color: msg.isMe ? const Color(0xFF2563EB) : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                      children: [
-                        if (!msg.isMe) ...[
-                          Text(msg.sender, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-                          const SizedBox(height: 2),
-                        ],
-                        Text(
-                          msg.text,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: msg.isMe ? Colors.white : Colors.black87,
+                    if (msg.isSystem) {
+                      return Center(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            msg.text,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade800, height: 1.4),
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      );
+                    }
+
+                    return Align(
+                      alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        decoration: BoxDecoration(
+                          color: msg.isMe ? const Color(0xFF2563EB) : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                          children: [
+                            if (!msg.isMe) ...[
+                              Text(msg.sender, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              const SizedBox(height: 2),
+                            ],
+                            Text(
+                              msg.text,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: msg.isMe ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -6863,8 +6944,9 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
     final String formattedDate =
         '${_selectedDate.month}월 ${_selectedDate.day}일(${_getWeekDayName(_selectedDate.weekday)})';
 
+    final author = gCurrentUser?.nickname ?? '나 (방장)';
     final newPost = RidePost(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: '',
       title: title,
       content: _contentController.text.trim(),
       resortName: _selectedResort!.name,
@@ -6877,7 +6959,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
       timeSlot: _selectedTimeSlot,
       maxMembers: _selectedMemberCount,
       currentMembers: 1,
-      authorName: '나 (방장)',
+      authorName: author,
       isAuthor: true,
       isJoined: true,
       chatMessages: [
@@ -6890,12 +6972,14 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
       ],
     );
 
+    // 🚀 Firestore 클라우드에 실시간 저장
+    AppFirebaseService.instance.createRidePost(newPost);
     gRidePosts.insert(0, newPost);
 
     Navigator.pop(context, true);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('모집글이 성공적으로 등록되었습니다!')),
+      const SnackBar(content: Text('모집글이 클라우드에 성공적으로 등록되었습니다!')),
     );
   }
 
