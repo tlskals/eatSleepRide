@@ -265,6 +265,53 @@ class ResortWeather {
   }
 }
 
+enum SlopeStatus {
+  open('운영중', Color(0xFF16A34A), Icons.check_circle_rounded),
+  closed('미운영/마감', Color(0xFFEF4444), Icons.cancel_rounded),
+  mogul('모굴 전용', Color(0xFFEA580C), Icons.waves_rounded),
+  park('파크/키커', Color(0xFF7C3AED), Icons.sports_kabaddi_rounded),
+  maintenance('정설/대기', Color(0xFFF59E0B), Icons.build_circle_rounded);
+
+  final String label;
+  final Color color;
+  final IconData icon;
+  const SlopeStatus(this.label, this.color, this.icon);
+}
+
+enum SlopeDifficulty {
+  beginner('초급', Color(0xFF22C55E)),
+  novice('초중급', Color(0xFF06B6D4)),
+  intermediate('중급', Color(0xFF3B82F6)),
+  advanced('중상급', Color(0xFF8B5CF6)),
+  expert('상급', Color(0xFFEF4444)),
+  extreme('최상급', Color(0xFF0F172A)),
+  park('익스트림파크', Color(0xFFD97706));
+
+  final String label;
+  final Color color;
+  const SlopeDifficulty(this.label, this.color);
+}
+
+class DetailedSlope {
+  final String name;
+  final String section;
+  final SlopeDifficulty difficulty;
+  final SlopeStatus status;
+  final String length;
+  final String note;
+
+  const DetailedSlope({
+    required this.name,
+    this.section = '메인 구역',
+    required this.difficulty,
+    this.status = SlopeStatus.open,
+    this.length = '',
+    this.note = '',
+  });
+
+  String get displayName => '$name (${difficulty.label})';
+}
+
 class SkiResort {
   final String id;
   final String name;
@@ -272,7 +319,7 @@ class SkiResort {
   final String region;
   final double lat;
   final double lng;
-  final List<String> slopes;
+  final List<DetailedSlope> detailedSlopes;
   final List<String> availableTimeSlots;
   final List<SkiWebcam> webcams;
   final IconData icon;
@@ -285,13 +332,14 @@ class SkiResort {
     required this.region,
     required this.lat,
     required this.lng,
-    required this.slopes,
+    required this.detailedSlopes,
     this.availableTimeSlots = const ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)'],
     required this.webcams,
     this.icon = Icons.snowboarding_rounded,
     this.themeColor = const Color(0xFF2563EB),
   });
 
+  List<String> get slopes => detailedSlopes.map((s) => s.displayName).toList();
   String get logoAsset => 'assets/logos/$id.png';
 }
 
@@ -804,7 +852,17 @@ const List<SkiResort> kSkiResorts = [
     lng: 127.2934,
     icon: Icons.snowboarding_rounded,
     themeColor: Color(0xFF1E40AF),
-    slopes: ['하늬 (초급)', '휘슬 (초중급)', '와이낫 (중급)', '그램 (중급)', '윈디 (중상급)', '제타 (상급)', '게일 (최상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '하늬', section: '베이스/초급', difficulty: SlopeDifficulty.beginner, length: '460m', note: '초심자 전용 와이드 슬로프'),
+      DetailedSlope(name: '휘슬', section: '초중급', difficulty: SlopeDifficulty.novice, length: '850m', note: '완만하고 넓은 초중급 코스'),
+      DetailedSlope(name: '와이낫 (Why Not)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '750m', note: '곤지암 대표 중급 카빙'),
+      DetailedSlope(name: '그램 (Gram)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '680m', note: '다이나믹 롤러코스터 지형'),
+      DetailedSlope(name: '윈디 (Windy)', section: '정상/중상급', difficulty: SlopeDifficulty.advanced, length: '1,429m', note: '정상 쉼터 뷰 & 롱 크루징'),
+      DetailedSlope(name: '제타 1 (Zeta 1)', section: '정상/상급', difficulty: SlopeDifficulty.expert, length: '980m', note: '상급 인터스키 기술선수권 코스'),
+      DetailedSlope(name: '제타 2 (Zeta 2)', section: '상급', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m', note: '모굴 전용 라인'),
+      DetailedSlope(name: '게일 (Gale)', section: '정상/최상급', difficulty: SlopeDifficulty.extreme, length: '1,050m', note: '곤지암 최고 경사 절벽 사면'),
+      DetailedSlope(name: '곤지암 펀파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m', note: '웨이브 & 비기너 키커 존'),
+    ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~02)'],
     webcams: [
       SkiWebcam(name: '윈디/제타 상급 정상', location: '해발 500m 정상 쉼터', streamUrl: 'https://www.konjiamresort.co.kr'),
@@ -821,7 +879,20 @@ const List<SkiResort> kSkiResorts = [
     lng: 127.6837,
     icon: Icons.downhill_skiing_rounded,
     themeColor: Color(0xFF7C3AED),
-    slopes: ['발라드 (초급)', '재즈 (중급)', '클래식 (중상급)', '레게 (상급)', '테크노 (최상급)', '락 (최상급)', '블루스 (초급)', '힙합 (상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '발라드 (Ballad)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '480m', note: '국내 최다 인파 메인 슬로프'),
+      DetailedSlope(name: '블루스 (Blues)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m', note: '초심자 전용 강습 코스'),
+      DetailedSlope(name: '재즈 (Jazz)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '비발디 대표 고속 카빙 코스'),
+      DetailedSlope(name: '레게 (Reggae)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '570m', note: '재즈 우회 급사면 진입로'),
+      DetailedSlope(name: '클래식 (Classic)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '750m', note: '밸리 연결 와이드 코스'),
+      DetailedSlope(name: '힙합 1 (Hiphop 1)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '620m', note: '인터스키 게렌데 & 야간 핫플레이스'),
+      DetailedSlope(name: '힙합 2 (Hiphop 2)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '480m', note: '힙합 우회 테크니컬'),
+      DetailedSlope(name: '테크노 1 (Techno 1)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '800m', note: '매봉산 정상 직벽 다운힐'),
+      DetailedSlope(name: '테크노 2 (Techno 2)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '650m', note: '테크노 중단부 고속 카빙'),
+      DetailedSlope(name: '락 (Rock)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '590m', note: '비발디 최고 난이도 절벽 사면'),
+      DetailedSlope(name: '펑키 (Funky)', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '550m', note: '모굴/파우더 구역'),
+      DetailedSlope(name: '비발디 익스트림 파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '500m', note: '2단 키커 & 레일/박스 지빙 라인'),
+    ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (23:00~03:00)'],
     webcams: [
       SkiWebcam(name: '재즈(Jazz) 중급 슬로프', location: '재즈 리프트 상단', streamUrl: 'https://www.sonohotelsresorts.com'),
@@ -838,7 +909,23 @@ const List<SkiResort> kSkiResorts = [
     lng: 128.6797,
     icon: Icons.landscape_rounded,
     themeColor: Color(0xFF0D9488),
-    slopes: ['옐로우 (초급)', '메가그린 (초급)', '핑크 (초중급)', '골드 (중상급)', '레드 (상급)', '레인보우 (최상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '레인보우 파라다이스', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.novice, length: '5,600m', note: '국내 최장 힐링 롱코스 파노라마'),
+      DetailedSlope(name: '레인보우 1 (골드)', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,200m', note: '월드컵 알파인 공인 레이스 코스'),
+      DetailedSlope(name: '레인보우 2', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,150m', note: '레인보우 메인 급경사 직벽'),
+      DetailedSlope(name: '레인보우 3', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '1,050m', note: '대한민국 봄 시즌 모굴의 성지'),
+      DetailedSlope(name: '레인보우 4', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,300m', note: '파우더 설질 & 테크니컬'),
+      DetailedSlope(name: '골드밸리', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,655m', note: '용평 최고의 인터스키 고속 카빙'),
+      DetailedSlope(name: '골드파라다이스', section: '골드 구역', difficulty: SlopeDifficulty.intermediate, length: '1,450m', note: '쾌적하고 넓은 와이드 중급'),
+      DetailedSlope(name: '골드환타지', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,200m', note: '골드 리프트 상단 롤러코스터'),
+      DetailedSlope(name: '레드 (Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '950m', note: '야간 메인 상급 슬로프 & 카빙'),
+      DetailedSlope(name: '뉴레드 (New Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '레드 리프트 좌측 급사면'),
+      DetailedSlope(name: '실버 (Silver)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,000m', note: '자연설 파우더 구역'),
+      DetailedSlope(name: '메가그린 (Mega Green)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '700m', note: '국내 최대 폭 180m 광폭 슬로프'),
+      DetailedSlope(name: '핑크 (Pink)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '650m', note: '초중급 롱턴 & 숏턴 연습'),
+      DetailedSlope(name: '옐로우 (Yellow)', section: '베이스 구역', difficulty: SlopeDifficulty.beginner, length: '550m', note: '비기너 강습 전용'),
+      DetailedSlope(name: '드래곤 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m', note: '지빙 기물 & 미니 키커'),
+    ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (19:00~22:00)'],
     webcams: [
       SkiWebcam(name: '발왕산 드래곤피크 (1,458m)', location: '레인보우 최정상', streamUrl: 'https://www.yongpyong.co.kr'),
@@ -855,7 +942,23 @@ const List<SkiResort> kSkiResorts = [
     lng: 128.3248,
     icon: Icons.ac_unit_rounded,
     themeColor: Color(0xFF16A34A),
-    slopes: ['펭귄 (초급)', '호크 (초중급)', '듀크 (중급)', '파노라마 (초중급)', '챔피언 (상급)', '디지 (최상급)', '익스트림 파크'],
+    detailedSlopes: [
+      DetailedSlope(name: '불새마루 도도 (Dodo)', section: '불새마루 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m', note: '스노우보더 인기 카빙 명소'),
+      DetailedSlope(name: '불새마루 듀크 (Duke)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '950m', note: '중급 턴 & 엣징 연습'),
+      DetailedSlope(name: '불새마루 키위 (Kiwi)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '750m', note: '불새마루 우회 코스'),
+      DetailedSlope(name: '스패로우 (Sparrow)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '920m', note: '넓은 폭의 완만한 초급 코스'),
+      DetailedSlope(name: '펭귄 (Penguin)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '650m', note: '메인 스키하우스 베이스 직결'),
+      DetailedSlope(name: '호크 1 (Hawk 1)', section: '불새마루 구역', difficulty: SlopeDifficulty.novice, length: '1,050m', note: '휘팍 최고의 야간 라이딩 명소'),
+      DetailedSlope(name: '호크 2 (Hawk 2)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '800m', note: '호크 리프트 직하강 중급'),
+      DetailedSlope(name: '파노라마 (Panorama)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.novice, length: '2,400m', note: '몽블랑에서 베이스까지 2.4km 파노라마'),
+      DetailedSlope(name: '챔피온 (Champion)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '1,000m', note: '정통 알파인 급경사 카빙'),
+      DetailedSlope(name: '디지 (Dizzy)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.extreme, length: '850m', note: '휘닉스 최고 난이도 직벽 사면'),
+      DetailedSlope(name: '밸리 (Valley)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.advanced, length: '1,120m', note: '몽블랑에서 밸리로 이어지는 다운힐'),
+      DetailedSlope(name: '환타지아 (Fantasia)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '900m', note: '정상 쉼터 우측 테크니컬'),
+      DetailedSlope(name: '슬로프스타일 (익스트림 파크)', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '600m', note: '국내 1위 익스트림 파크 키커 & 지빙 레일'),
+      DetailedSlope(name: '슈퍼 하프파이프', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '160m', note: '국제 규격 높이 6.8m 슈퍼파이프'),
+      DetailedSlope(name: '펀파크 & 웨이브존', section: '익스트림 파크', difficulty: SlopeDifficulty.novice, status: SlopeStatus.park, length: '450m', note: '초중급자 파크 입문 및 뱅크드 슬라럼'),
+    ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~24)'],
     webcams: [
       SkiWebcam(name: '몽블랑 정상 (해발 1,050m)', location: '곤돌라 정상 정류장', streamUrl: 'https://phoenixhnr.co.kr'),
@@ -872,7 +975,25 @@ const List<SkiResort> kSkiResorts = [
     lng: 128.8354,
     icon: Icons.terrain_rounded,
     themeColor: Color(0xFF6B21A8),
-    slopes: ['제우스 (초급)', '아테나 (초중급)', '헤라 (중상급)', '아폴로 (상급)', '빅토리아 (최상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '빅토리아 1', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, length: '1,439m', note: '하이원 최고 경사 절벽 카빙 사면'),
+      DetailedSlope(name: '빅토리아 2', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '1,300m', note: '상단 모굴 전용 코스'),
+      DetailedSlope(name: '빅토리아 3', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, length: '1,150m', note: '밸리허브 다운힐 테크니컬'),
+      DetailedSlope(name: '헤라 1', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.intermediate, length: '1,504m', note: '마운틴탑~허브 최고의 광폭 크루징'),
+      DetailedSlope(name: '헤라 2', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.advanced, status: SlopeStatus.mogul, length: '1,230m', note: '시즌 후반 모굴 & 테크니컬 전용 운영'),
+      DetailedSlope(name: '헤라 3', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,100m', note: '헤라 리프트 상단 급사면'),
+      DetailedSlope(name: '아폴로 1', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,803m', note: '밸리탑 직벽 레이스 코스'),
+      DetailedSlope(name: '아폴로 2', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,250m', note: '밸리허브 연결 상급 코스'),
+      DetailedSlope(name: '아폴로 3', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.advanced, length: '1,400m', note: '아폴로 리프트 연결 중상급'),
+      DetailedSlope(name: '아폴로 4', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,550m', note: '스프링 시즌 마지막까지 단독 오픈하는 전설의 슬로프'),
+      DetailedSlope(name: '아폴로 6', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,180m', note: '밸리콘도 직결로'),
+      DetailedSlope(name: '아테나 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,700m', note: '마운틴탑~마운틴허브 완만코스'),
+      DetailedSlope(name: '아테나 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.novice, length: '1,670m', note: '마운틴허브~마운틴베이스 롱코스'),
+      DetailedSlope(name: '아테나 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,200m', note: '마운틴베이스 연결 코스'),
+      DetailedSlope(name: '제우스 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '2,329m', note: '밸리탑~밸리허브 롱코스 초보자 천국'),
+      DetailedSlope(name: '제우스 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,840m', note: '밸리허브~밸리베이스 광폭 슬로프'),
+      DetailedSlope(name: '제우스 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,020m', note: '제우스 우회 완경사'),
+    ],
     availableTimeSlots: ['주간 (09~16)', '오후 (12~16)', '야간 (18~22)'],
     webcams: [
       SkiWebcam(name: '마운틴 탑 (해발 1,340m)', location: '회전전망대 정상', streamUrl: 'https://www.high1.com'),
@@ -889,7 +1010,17 @@ const List<SkiResort> kSkiResorts = [
     lng: 128.2494,
     icon: Icons.snowshoeing_rounded,
     themeColor: Color(0xFF0F766E),
-    slopes: ['알파 (초급)', '브라보 (중급)', '에코 (중급)', '챌린지 (상급)', '스타 (최상급)', '펀파크'],
+    detailedSlopes: [
+      DetailedSlope(name: '알파 1 (A1)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '700m', note: '메인 베이스 초급 코스'),
+      DetailedSlope(name: '알파 2, 3 (A2/A3)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '600m', note: '초보 연습 전용'),
+      DetailedSlope(name: '브라보 1 (B1)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m', note: '웰리힐리 대표 고속 카빙 슬로프'),
+      DetailedSlope(name: '브라보 2 (B2)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '950m', note: '브라보 리프트 상단 와이드'),
+      DetailedSlope(name: '에코 1, 2 (E1/E2)', section: '에코 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '술이봉 곤돌라 하단 연결'),
+      DetailedSlope(name: '챌린지 1, 2 (C1/C2)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '상급 인터스키 게렌데'),
+      DetailedSlope(name: '챌린지 4, 5 (C4/C5)', section: '챌린지 구역', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '950m', note: 'C5 모굴 라인 & 급경사'),
+      DetailedSlope(name: '스타익스프레스', section: '관광 롱코스', difficulty: SlopeDifficulty.novice, length: '2,100m', note: '술이봉 정상에서 이어지는 2.1km 롱코스'),
+      DetailedSlope(name: '웰리 펀파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '650m', note: '국내 최장 규모 펀파크 키커 & 지빙 라인'),
+    ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (22:30~24:00)'],
     webcams: [
       SkiWebcam(name: '술이봉 정상 (해발 890m)', location: '곤돌라 정상 하차장', streamUrl: 'https://www.wellihillipark.com'),
@@ -906,7 +1037,16 @@ const List<SkiResort> kSkiResorts = [
     lng: 127.3486,
     icon: Icons.forest_rounded,
     themeColor: Color(0xFF16A34A),
-    slopes: ['1번 슬로프 (초급)', '2번 슬로프 (초중급)', '3번 슬로프 (중급)', '5번 슬로프 (상급)', '7번 슬로프 (최상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '950m', note: '메인 베이스 연결 와이드 슬로프'),
+      DetailedSlope(name: '1-1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '300m', note: '초심자 전용 입문 강습장'),
+      DetailedSlope(name: '2번 슬로프 (오렌지)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '700m', note: '중벌 고속 리프트 연결 코스'),
+      DetailedSlope(name: '3번 슬로프 (뉴오렌지)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '중급 카빙 & 다이나믹 웨이브'),
+      DetailedSlope(name: '5번 슬로프 (구 블루/실버)', section: '상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m', note: '지산 최고의 고속 카빙 메인 슬로프'),
+      DetailedSlope(name: '6번 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '800m', note: '연결 및 안전 전용로'),
+      DetailedSlope(name: '7번 슬로프 (구 블랙)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '950m', note: '지산 최고 경사도 절벽 & 모굴 코스'),
+      DetailedSlope(name: '지산 익스트림 파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '500m', note: '수도권 최강 3단 키커 및 레일/박스 지빙'),
+    ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~23:00)', '심야 (23:00~02:00)'],
     webcams: [
       SkiWebcam(name: '5번 / 7번 상급 슬로프', location: '고속 리프트 상단', streamUrl: 'https://www.jisanresort.co.kr'),
@@ -923,7 +1063,13 @@ const List<SkiResort> kSkiResorts = [
     lng: 128.9489,
     icon: Icons.cloud_rounded,
     themeColor: Color(0xFF0284C7),
-    slopes: ['드림 (초급)', '해피 (초중급)', '글로리 (중급)', '챌린지 (상급)', '패션 (상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '드림 1, 2 (Dream)', section: '드림 구역', difficulty: SlopeDifficulty.beginner, length: '1,100m', note: '완만하고 아늑한 숲속 힐링 코스'),
+      DetailedSlope(name: '해피 (Happy)', section: '해피 구역', difficulty: SlopeDifficulty.novice, length: '2,150m', note: '함백산 능선 2.1km 롱코스'),
+      DetailedSlope(name: '글로리 1, 2 (Glory)', section: '글로리 구역', difficulty: SlopeDifficulty.intermediate, length: '1,400m', note: '천연 파우더 설질 중급 카빙'),
+      DetailedSlope(name: '챌린지 (Challenge)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '900m', note: '오투 타워 정상 급경사 다운힐'),
+      DetailedSlope(name: '패션 (Passion)', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '750m', note: '고난이도 테크니컬 코스'),
+    ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~21:30)'],
     webcams: [
       SkiWebcam(name: '함백산 정상 뷰 (1,420m)', location: '오투 타워 정상', streamUrl: 'https://www.o2resort.com'),
@@ -939,7 +1085,15 @@ const List<SkiResort> kSkiResorts = [
     lng: 127.5880,
     icon: Icons.park_rounded,
     themeColor: Color(0xFF4B5563),
-    slopes: ['팬더 (초급)', '드래곤 (초중급)', '디어 (중급)', '퓨마 (상급)', '페가수스 (상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '팬더 (Panda)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '500m', note: '메인 스키하우스 앞 광폭 슬로프'),
+      DetailedSlope(name: '래빗 (Rabbit)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m', note: '초심자 전용 강습장'),
+      DetailedSlope(name: '드래곤 (Dragon)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,050m', note: '백양리 전철역 뷰 롱 크루징'),
+      DetailedSlope(name: '디어 (Deer)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '엘리시안 대표 중급 카빙'),
+      DetailedSlope(name: '퓨마 (Puma)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '알프스 하우스 방면 급경사'),
+      DetailedSlope(name: '페가수스 (Pegasus)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '엘리시안 최고 난이도 테크니컬 코스'),
+      DetailedSlope(name: '강촌 익스트림 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m', note: '박스, 레일, 미니 키커'),
+    ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~22:30)', '심야 (22:30~03:00)'],
     webcams: [
       SkiWebcam(name: '드래곤/디어 슬로프', location: '알프스 하우스 앞', streamUrl: 'https://www.elysian.co.kr'),
@@ -955,7 +1109,17 @@ const List<SkiResort> kSkiResorts = [
     lng: 127.7417,
     icon: Icons.filter_hdr_rounded,
     themeColor: Color(0xFF0284C7),
-    slopes: ['실크로드 (초중급)', '루키힐 (중급)', '만선봉 (상급)', '레이더스 (최상급)', '설천봉'],
+    detailedSlopes: [
+      DetailedSlope(name: '실크로드 상단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,100m', note: '구름 위를 달리는 환상의 롱코스'),
+      DetailedSlope(name: '실크로드 하단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,000m', note: '국내 단일 최장 슬로프 (총 6.1km)'),
+      DetailedSlope(name: '루키힐', section: '만선베이스', difficulty: SlopeDifficulty.intermediate, length: '1,200m', note: '만선 최고의 인기 중급 카빙 코스'),
+      DetailedSlope(name: '커넥션', section: '만선베이스', difficulty: SlopeDifficulty.beginner, length: '800m', note: '만선과 설천을 잇는 광폭 초급로'),
+      DetailedSlope(name: '레이더스 상단', section: '만선봉 정상', difficulty: SlopeDifficulty.extreme, length: '950m', note: '국내 최고 경사도 38도 직벽 절벽 사면'),
+      DetailedSlope(name: '레이더스 하단', section: '만선봉 정상', difficulty: SlopeDifficulty.expert, length: '800m', note: '레이더스 연결 고속 다운힐'),
+      DetailedSlope(name: '프리폴', section: '설천 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '설천봉 급사면 상급 코스'),
+      DetailedSlope(name: '야마가', section: '만선 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m', note: '전통의 모굴 테크니컬 코스'),
+      DetailedSlope(name: '미뉴에트 / 모차르트', section: '설천봉 능선', difficulty: SlopeDifficulty.expert, length: '1,000m', note: '설천봉 능선 고난이도 코스'),
+    ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
     webcams: [
       SkiWebcam(name: '설천봉 정상 (해발 1,520m)', location: '향적봉 케이블카 상단', streamUrl: 'https://www.mdysresort.com'),
@@ -972,7 +1136,14 @@ const List<SkiResort> kSkiResorts = [
     lng: 128.6713,
     icon: Icons.terrain_rounded,
     themeColor: Color(0xFFD97706),
-    slopes: ['알파 (초급)', '브라보 (초중급)', '찰리 (중급)', '델타 (상급)', '에코 (상급)', '폭스트롯 (최상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: '알파 (Alpha)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '650m', note: '패밀리 초급 전용 슬로프'),
+      DetailedSlope(name: '브라보 (Bravo)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '950m', note: '안전하고 쾌적한 완경사 카빙'),
+      DetailedSlope(name: '찰리 (Charlie)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m', note: '알펜시아 메인 중급 코스'),
+      DetailedSlope(name: '델타 (Delta)', section: '상급 구역', difficulty: SlopeDifficulty.advanced, length: '850m', note: '상급 인터스키 게렌데'),
+      DetailedSlope(name: '에코 (Echo)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '리프트 최상단 급경사 다운힐'),
+      DetailedSlope(name: '폭스트롯 (Foxtrot)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '600m', note: '알펜시아 최고 난이도 직벽 사면'),
+    ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
     webcams: [
       SkiWebcam(name: '알펜시아 메인 슬로프', location: '스키하우스 2층 전망대', streamUrl: 'https://www.alpensia.com'),
@@ -988,11 +1159,38 @@ const List<SkiResort> kSkiResorts = [
     lng: 127.8188,
     icon: Icons.nature_people_rounded,
     themeColor: Color(0xFF0369A1),
-    slopes: ['I 슬로프 (초급)', 'F 슬로프 (초중급)', 'A 슬로프 (중급)', 'G 슬로프 (상급)'],
+    detailedSlopes: [
+      DetailedSlope(name: 'I 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '500m', note: '초심자 전용 강습장'),
+      DetailedSlope(name: 'F 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '950m', note: '밸리 전경 롱 크루징'),
+      DetailedSlope(name: 'A 슬로프', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,200m', note: '오크밸리 대표 고속 카빙 코스'),
+      DetailedSlope(name: 'G 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '마운틴 정상 급사면 인터스키'),
+      DetailedSlope(name: '스노우파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m', note: '지빙 레일 & 비기너 키커'),
+    ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~22:30)'],
     webcams: [
       SkiWebcam(name: 'A / G 상급 슬로프', location: '마운틴 정상', streamUrl: 'https://www.oakvalley.co.kr'),
       SkiWebcam(name: '골프빌리지 베이스', location: '스키빌리지 중앙 광장', streamUrl: 'https://www.oakvalley.co.kr'),
+    ],
+  ),
+  SkiResort(
+    id: 'edenvalley',
+    name: '에덴밸리 (양산)',
+    shortName: '에덴밸리',
+    region: '경남 양산',
+    lat: 35.4312,
+    lng: 128.9868,
+    icon: Icons.downhill_skiing_rounded,
+    themeColor: Color(0xFF059669),
+    detailedSlopes: [
+      DetailedSlope(name: '베이직 (Basic)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '600m', note: '영남권 메인 초급 강습 코스'),
+      DetailedSlope(name: '메인 (Main)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '950m', note: '에덴밸리 대표 와이드 슬로프'),
+      DetailedSlope(name: '쥬피터 (Jupiter)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m', note: '고속 크루징 및 카빙 코스'),
+      DetailedSlope(name: '새턴 (Saturn)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '800m', note: '영남권 최고 난이도 직벽'),
+      DetailedSlope(name: '우라누스 (Uranus)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '테크니컬 사면'),
+    ],
+    availableTimeSlots: ['주간 (09:30~17:00)', '야간 (18:30~23:00)', '심야 (23:00~01:30)'],
+    webcams: [
+      SkiWebcam(name: '메인 슬로프 베이스', location: '에덴밸리 스키하우스 정면', streamUrl: 'https://www.edenvalley.co.kr'),
     ],
   ),
 ];
@@ -4568,30 +4766,8 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 4. 슬로프 정보
-                  Row(
-                    children: [
-                      const Text('⛷️ 보유 슬로프', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 6),
-                      Text('${resort.slopes.length}개', style: TextStyle(fontSize: 13, color: resort.themeColor, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: resort.slopes.map((slope) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Text(slope, style: const TextStyle(fontSize: 12.5)),
-                      );
-                    }).toList(),
-                  ),
+                  // 4. 실시간 슬로프 운용 현황판 & 구역별 세부 슬로프
+                  DetailedSlopeStatusWidget(resort: resort),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -4763,6 +4939,242 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
         ),
       ),
     );
+  }
+}
+
+// -------------------------------------------------------------
+// 실시간 슬로프 현황판 & 구역별 세부 슬로프 위젯
+// -------------------------------------------------------------
+class DetailedSlopeStatusWidget extends StatefulWidget {
+  final SkiResort resort;
+  const DetailedSlopeStatusWidget({super.key, required this.resort});
+
+  @override
+  State<DetailedSlopeStatusWidget> createState() => _DetailedSlopeStatusWidgetState();
+}
+
+class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
+  String _selectedSection = '전체';
+
+  @override
+  Widget build(BuildContext context) {
+    final slopes = widget.resort.detailedSlopes;
+    final sections = ['전체', ...{for (var s in slopes) s.section}];
+
+    final openCount = slopes.where((s) => s.status == SlopeStatus.open).length;
+    final mogulCount = slopes.where((s) => s.status == SlopeStatus.mogul).length;
+    final parkCount = slopes.where((s) => s.status == SlopeStatus.park).length;
+    final closedCount = slopes.where((s) => s.status == SlopeStatus.closed).length;
+
+    final filteredSlopes = _selectedSection == '전체'
+        ? slopes
+        : slopes.where((s) => s.section == _selectedSection).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Text('⛷️ 실시간 슬로프 현황판', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Text('총 ${slopes.length}개', style: TextStyle(fontSize: 13, color: widget.resort.themeColor, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: const Row(
+                children: [
+                  CircleAvatar(radius: 3, backgroundColor: Colors.green),
+                  SizedBox(width: 4),
+                  Text('26/27 실시간', style: TextStyle(fontSize: 10.5, color: Colors.green, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        // 운용 상태 서머리 배지 바
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatusPill('🟢 오픈', '$openCount', Colors.green.shade700),
+              _buildDivider(),
+              _buildStatusPill('🟡 모굴', '$mogulCount', Colors.orange.shade800),
+              _buildDivider(),
+              _buildStatusPill('❄️ 파크', '$parkCount', Colors.purple.shade700),
+              _buildDivider(),
+              _buildStatusPill('🔴 미운영', '$closedCount', Colors.red.shade700),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // 구역(Section) 선택 필터 칩
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: sections.map((sec) {
+              final isSelected = _selectedSection == sec;
+              final count = sec == '전체' ? slopes.length : slopes.where((s) => s.section == sec).length;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text('$sec ($count)'),
+                  selected: isSelected,
+                  selectedColor: widget.resort.themeColor,
+                  labelStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.white : Colors.black87,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (val) {
+                    if (val) setState(() => _selectedSection = sec);
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // 세부 슬로프 카드 목록
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: filteredSlopes.length,
+          separatorBuilder: (context, idx) => const SizedBox(height: 8),
+          itemBuilder: (context, idx) {
+            final slope = filteredSlopes[idx];
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: slope.status == SlopeStatus.closed
+                      ? Colors.grey.shade300
+                      : (slope.status == SlopeStatus.mogul ? Colors.orange.shade200 : Colors.grey.shade200),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // 난이도 배지
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: slope.difficulty.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: slope.difficulty.color.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          slope.difficulty.label,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.difficulty.color),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // 슬로프 이름
+                      Expanded(
+                        child: Text(
+                          slope.name,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: slope.status == SlopeStatus.closed ? Colors.grey : Colors.black87,
+                            decoration: slope.status == SlopeStatus.closed ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                      ),
+                      // 실시간 운용 상태 태그
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: slope.status.color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: slope.status.color.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(slope.status.icon, size: 12, color: slope.status.color),
+                            const SizedBox(width: 4),
+                            Text(
+                              slope.status.label,
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.status.color),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (slope.length.isNotEmpty || slope.note.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (slope.length.isNotEmpty) ...[
+                          Icon(Icons.straighten_rounded, size: 13, color: Colors.grey.shade500),
+                          const SizedBox(width: 3),
+                          Text(slope.length, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                          const SizedBox(width: 8),
+                        ],
+                        if (slope.note.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              '• ${slope.note}',
+                              style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusPill(String title, String count, Color color) {
+    return Column(
+      children: [
+        Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87)),
+        const SizedBox(height: 2),
+        Text(count, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(width: 1, height: 20, color: Colors.grey.shade300);
   }
 }
 
@@ -7323,33 +7735,65 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
                 decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
                 child: const Text('스키장을 먼저 선택해주세요.', style: TextStyle(color: Colors.grey, fontSize: 13)),
               )
-            else
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: _selectedResort!.slopes.map((slope) {
-                  final isSelected = _selectedSlopes.contains(slope);
-                  return FilterChip(
-                    label: Text(slope, style: const TextStyle(fontSize: 12)),
-                    selected: isSelected,
-                    selectedColor: const Color(0xFF2563EB).withValues(alpha: 0.15),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                    checkmarkColor: const Color(0xFF2563EB),
-                    side: BorderSide(color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade300),
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedSlopes.add(slope);
-                        } else {
-                          _selectedSlopes.remove(slope);
-                        }
-                      });
-                    },
+            else ...[
+              // 구역별 세부 슬로프 선택 칩 리스트
+              ...() {
+                final sections = {for (var s in _selectedResort!.detailedSlopes) s.section}.toList();
+                return sections.map((sec) {
+                  final sectionSlopes = _selectedResort!.detailedSlopes.where((s) => s.section == sec).toList();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('📍 $sec', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade800)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: sectionSlopes.map((detailedSlope) {
+                            final slope = detailedSlope.displayName;
+                            final isSelected = _selectedSlopes.contains(slope);
+                            return FilterChip(
+                              avatar: CircleAvatar(
+                                radius: 4,
+                                backgroundColor: detailedSlope.difficulty.color,
+                              ),
+                              label: Text(
+                                detailedSlope.name,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected ? const Color(0xFF1E3A8A) : Colors.black87,
+                                ),
+                              ),
+                              selected: isSelected,
+                              selectedColor: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                              checkmarkColor: const Color(0xFF2563EB),
+                              side: BorderSide(
+                                color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade300,
+                              ),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    _selectedSlopes.add(slope);
+                                  } else {
+                                    _selectedSlopes.remove(slope);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
                   );
-                }).toList(),
-              ),
+                });
+              }(),
+            ],
             const SizedBox(height: 16),
             const Text('3. 종목 및 스타일 선택', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
