@@ -50,5 +50,9 @@
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>설질 후기 및 슬로프 인증 사진을 업로드하기 위해 갤러리 접근 권한이 필요합니다.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>실시간 설질 사진을 직접 촬영하여 등록하기 위해 카메라 접근 권한이 필요합니다.</string>
 </dict>
 </plist>

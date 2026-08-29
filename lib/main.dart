@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/firebase_service.dart';
@@ -3347,7 +3349,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
             ),
             const SizedBox(height: 12),
 
-            // 4. 첨부된 슬로프 사진 갤러리
+            // 4. 첨부된 슬로프 사진 갤러리 (실제 Storage 사진 & 프리셋 지원)
             if (review.photoLabels.isNotEmpty) ...[
               SizedBox(
                 height: 140,
@@ -3356,6 +3358,89 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                   itemCount: review.photoLabels.length,
                   itemBuilder: (context, photoIdx) {
                     final photoLabel = review.photoLabels[photoIdx];
+                    final isNetworkImage = photoLabel.startsWith('http');
+
+                    if (isNetworkImage) {
+                      return GestureDetector(
+                        onTap: () {
+                          // 사진 크게 보기 다이얼로그
+                          showDialog(
+                            context: context,
+                            builder: (context) => Dialog(
+                              backgroundColor: Colors.transparent,
+                              insetPadding: const EdgeInsets.all(12),
+                              child: Stack(
+                                alignment: Alignment.topRight,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.network(
+                                      photoLabel,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      child: Icon(Icons.close, color: Colors.white),
+                                    ),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 200,
+                          margin: const EdgeInsets.only(right: 10),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.network(
+                                  photoLabel,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(
+                                      color: Colors.grey.shade200,
+                                      child: const Center(
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (context, error, stackTrace) => Container(
+                                    color: Colors.grey.shade300,
+                                    child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 8,
+                                  left: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.verified, color: Colors.amber, size: 12),
+                                        SizedBox(width: 4),
+                                        Text('현장 인증', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
                     return Container(
                       width: 200,
                       margin: const EdgeInsets.only(right: 10),
@@ -3517,7 +3602,10 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
   int _rating = 5;
   final TextEditingController _contentController = TextEditingController();
   final List<String> _attachedPhotos = [];
+  final List<XFile> _selectedFiles = [];
   final List<String> _selectedTags = [];
+  final ImagePicker _picker = ImagePicker();
+  bool _isUploading = false;
 
   final List<String> _snowConditions = [
     '극상 파우더 ❄️',
@@ -3551,37 +3639,110 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
     super.dispose();
   }
 
+  Future<void> _pickFromGallery() async {
+    try {
+      final List<XFile> images = await _picker.pickMultiImage(imageQuality: 80);
+      if (images.isNotEmpty) {
+        setState(() {
+          _selectedFiles.addAll(images);
+        });
+      }
+    } catch (e) {
+      debugPrint('Gallery pick error: $e');
+    }
+  }
+
+  Future<void> _pickFromCamera() async {
+    try {
+      final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+      if (photo != null) {
+        setState(() {
+          _selectedFiles.add(photo);
+        });
+      }
+    } catch (e) {
+      debugPrint('Camera pick error: $e');
+    }
+  }
+
   void _addPhotoDialog() {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
-        return Container(
+        return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('슬로프 사진 추가', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              const Text('오늘 촬영한 슬로프 현장 사진을 선택하세요.', style: TextStyle(fontSize: 12.5, color: Colors.grey)),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
               const SizedBox(height: 16),
-              ..._samplePhotoPresets.map((photo) {
-                final isAdded = _attachedPhotos.contains(photo);
-                return ListTile(
-                  leading: const Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF2563EB)),
-                  title: Text(photo, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-                  trailing: isAdded ? const Icon(Icons.check, color: Colors.green) : null,
-                  onTap: () {
-                    if (!isAdded) {
-                      setState(() {
-                        _attachedPhotos.add(photo);
-                      });
-                    }
-                    Navigator.pop(context);
-                  },
-                );
-              }),
+              const Text('슬로프 사진 추가 방식 선택', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              const Text('오늘 촬영한 슬로프 현장 사진을 업로드해 보세요.', style: TextStyle(fontSize: 12.5, color: Colors.grey)),
+              const SizedBox(height: 16),
+
+              // 1. 갤러리에서 선택
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.photo_library_rounded, color: Color(0xFF2563EB)),
+                ),
+                title: const Text('앨범/갤러리에서 사진 선택', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
+                subtitle: const Text('여러 장의 고화질 현장 사진을 첨부할 수 있습니다.', style: TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromGallery();
+                },
+              ),
+
+              // 2. 카메라로 촬영
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.camera_alt_rounded, color: Colors.amber),
+                ),
+                title: const Text('카메라로 바로 촬영하기', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5)),
+                subtitle: const Text('슬로프에서 지금 바로 촬영하여 등록합니다.', style: TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromCamera();
+                },
+              ),
+
+              const Divider(height: 20),
+              const Text('또는 추천 프리셋 선택', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _samplePhotoPresets.map((photo) {
+                  final isAdded = _attachedPhotos.contains(photo);
+                  return ActionChip(
+                    avatar: Icon(Icons.add, size: 14, color: isAdded ? Colors.green : const Color(0xFF2563EB)),
+                    label: Text(photo, style: const TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      if (!isAdded) {
+                        setState(() {
+                          _attachedPhotos.add(photo);
+                        });
+                      }
+                      Navigator.pop(context);
+                    },
+                  );
+                }).toList(),
+              ),
             ],
           ),
         );
@@ -3589,7 +3750,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
     );
   }
 
-  void _submitReview() {
+  Future<void> _submitReview() async {
     final content = _contentController.text.trim();
     if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3629,6 +3790,24 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
       return;
     }
 
+    setState(() {
+      _isUploading = true;
+    });
+
+    // 📸 1. Firebase Storage에 선택된 실제 이미지들 업로드
+    final List<String> finalPhotoUrls = List.from(_attachedPhotos);
+    for (final file in _selectedFiles) {
+      try {
+        final bytes = await file.readAsBytes();
+        final url = await AppFirebaseService.instance.uploadReviewImageBytes(bytes, file.name);
+        if (url != null) {
+          finalPhotoUrls.insert(0, url);
+        }
+      } catch (e) {
+        debugPrint('Image upload error: $e');
+      }
+    }
+
     final newReview = RideReview(
       id: '',
       authorName: gCurrentUser?.nickname ?? '익명의 라이더',
@@ -3636,7 +3815,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
       snowCondition: _selectedSnowCondition,
       rating: _rating,
       content: content,
-      photoLabels: List.from(_attachedPhotos),
+      photoLabels: finalPhotoUrls,
       tags: List.from(_selectedTags),
       createdAt: DateTime.now(),
       likeCount: 1,
@@ -3648,19 +3827,24 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
     AppFirebaseService.instance.createReview(newReview);
     gRideReviews.insert(0, newReview);
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Color(0xFF1E3A8A),
-        content: Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text('후기가 성공적으로 등록되었습니다! 🎿 (+100P 지급)'),
-          ],
+    if (mounted) {
+      setState(() {
+        _isUploading = false;
+      });
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF1E3A8A),
+          content: Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text('후기와 사진이 클라우드에 성공적으로 등록되었습니다! 🎿 (+100P 지급)'),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -3776,6 +3960,61 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
                 ),
               ],
             ),
+            // 선택된 실제 사진 썸네일 리스트
+            if (_selectedFiles.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 90,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _selectedFiles.length,
+                  itemBuilder: (context, index) {
+                    final file = _selectedFiles[index];
+                    return FutureBuilder<Uint8List>(
+                      future: file.readAsBytes(),
+                      builder: (context, snapshot) {
+                        return Container(
+                          width: 90,
+                          height: 90,
+                          margin: const EdgeInsets.only(right: 10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: snapshot.hasData
+                                    ? Image.memory(snapshot.data!, fit: BoxFit.cover)
+                                    : Container(color: Colors.grey.shade200, child: const Center(child: CircularProgressIndicator(strokeWidth: 2))),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedFiles.removeAt(index);
+                                    });
+                                  },
+                                  child: const CircleAvatar(
+                                    radius: 11,
+                                    backgroundColor: Colors.black87,
+                                    child: Icon(Icons.close, size: 12, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
             if (_attachedPhotos.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(
@@ -3861,14 +4100,23 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: _submitReview,
+                onPressed: _isUploading ? null : _submitReview,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 2,
                 ),
-                child: const Text('후기 & 사진 등록 완료 🏂', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: _isUploading
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                          SizedBox(width: 12),
+                          Text('사진 클라우드 업로드 중...', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        ],
+                      )
+                    : const Text('후기 & 사진 등록 완료 🏂', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 20),
@@ -5824,46 +6072,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  void _handleSocialLogin(BuildContext context, SocialAuthProvider provider) {
-    final randomNum = 1000 + (DateTime.now().microsecond % 9000);
-    final name = '익명의라이더#$randomNum';
-    String email;
-    switch (provider) {
-      case SocialAuthProvider.kakao:
-        email = 'kakao_user@kakao.com';
-        break;
-      case SocialAuthProvider.naver:
-        email = 'naver_user@naver.com';
-        break;
-      case SocialAuthProvider.apple:
-        email = 'apple_id@privaterelay.appleid.com';
-        break;
+  void _handleSocialLogin(BuildContext context, SocialAuthProvider provider) async {
+    UserProfile? profile;
+    if (provider == SocialAuthProvider.kakao) {
+      profile = await AppFirebaseService.instance.signInWithKakao();
+    } else if (provider == SocialAuthProvider.apple) {
+      profile = await AppFirebaseService.instance.signInWithApple();
+    } else {
+      profile = await AppFirebaseService.instance.signInWithNaver();
     }
 
-    gCurrentUser = UserProfile(
-      id: 'user_${provider.name}_${DateTime.now().millisecondsSinceEpoch}',
-      provider: provider,
-      email: email,
-      nickname: name,
-      preferredDiscipline: '스노보드',
-      homeResort: '비발디파크',
-      level: '중급',
-      joinedAt: DateTime.now(),
-    );
-
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF1E3A8A),
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Text('${gCurrentUser!.providerDisplayName} 완료! 환영합니다 🎿'),
-          ],
+    if (context.mounted && profile != null) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF1E3A8A),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text('${profile.providerDisplayName} 로그인 완료! 환영합니다 🎿'),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
