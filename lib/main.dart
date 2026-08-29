@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/firebase_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +66,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     AppFirebaseService.instance.initUserAuthAndProfile().then((_) {
       AppFirebaseService.instance.seedInitialDataIfEmpty(gRidePosts, gRideReviews);
     });
+
+    // 🔔 푸시 알림 및 로컬 알림 서비스 초기화 (권한 요청 및 토큰 등록)
+    NotificationService.instance.initialize();
 
     // 사용자가 로고와 안내 문구를 여유 있게 인지할 수 있도록 1.8초 동안 유지
     Timer(const Duration(milliseconds: 1800), () {
@@ -2511,6 +2515,13 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
 
     // 전체 글 목록 최상단에 추가
     gRidePosts.insert(0, newPost);
+
+    // 🔔 4인 매칭 성공 로컬 푸시 알림 배너 띄우기
+    NotificationService.instance.showLocalNotification(
+      title: '⚡️ 4인 슬로프 번개 매칭 완료!',
+      body: '[${resort.shortName}] 번개 동행 4인이 모두 모였습니다. 지금 대화방에서 만남 위치를 확인해보세요! ⛷️🏂',
+      payload: newPost.id,
+    );
 
     // 채팅방 화면으로 바로 이동
     Navigator.of(context).push(
@@ -6142,6 +6153,15 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
       AppFirebaseService.instance.toggleJoinRidePost(widget.post.id, myNickname);
     }
 
+    // 🔔 방장에게 동행 참가 푸시 알림 전송
+    NotificationService.instance.notifyRider(
+      targetAuthorName: widget.post.authorName,
+      title: '🎉 [${widget.post.resortName.split(' ')[0]}] 동행 참가 알림',
+      body: '\'$myNickname\' 님이 \'${widget.post.title}\' 모임에 참가했습니다!',
+      type: 'ride_join',
+      postId: widget.post.id,
+    );
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         backgroundColor: Color(0xFF1E3A8A),
@@ -6506,6 +6526,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (widget.post.id.isNotEmpty) {
       AppFirebaseService.instance.sendChatMessage(widget.post.id, newMsg);
     }
+
+    // 🔔 대화방 참가자 푸시 알림 전송
+    NotificationService.instance.notifyRider(
+      targetAuthorName: widget.post.authorName,
+      title: '💬 [${widget.post.resortName.split(' ')[0]}] 새 메시지',
+      body: '$myNickname: $text',
+      type: 'chat_message',
+      postId: widget.post.id,
+    );
 
     _msgController.clear();
 
