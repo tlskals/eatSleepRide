@@ -1537,34 +1537,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green.shade200, width: 0.8),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Text(
-                  '접속 48명',
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -1636,36 +1608,24 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade400.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade300.withValues(alpha: 0.5), width: 1),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade400.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber.shade300.withValues(alpha: 0.5), width: 1),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.bolt_rounded, color: Colors.amber, size: 16),
+                SizedBox(width: 4),
+                Text(
+                  '실시간 4인 랜덤 매칭',
+                  style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
                 ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.bolt_rounded, color: Colors.amber, size: 16),
-                    SizedBox(width: 4),
-                    Text(
-                      '실시간 4인 랜덤 매칭',
-                      style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text('대기열 작동중 🟢', style: TextStyle(color: Colors.white70, fontSize: 11)),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           const Text(
@@ -1680,29 +1640,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '복잡한 조건 없이 스키장 하나만 선택하면 4명이 모이는 즉시 채팅방이 열립니다.',
-            style: TextStyle(fontSize: 12.5, color: Colors.blue.shade100, height: 1.35),
+            '복잡한 조건 없이 스키장 하나만 선택하면 4명이 모이는 즉시 대화방이 열립니다.',
+            style: TextStyle(fontSize: 13, color: Colors.blue.shade100, height: 1.4),
           ),
-          const SizedBox(height: 16),
-
-          // 실시간 스키장별 대기 현황 칩 (가로 스크롤)
-          SizedBox(
-            height: 38,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildMatchingResortChip('비발디', '18명 대기', const Color(0xFF7C3AED)),
-                _buildMatchingResortChip('휘닉스', '14명 대기', const Color(0xFF16A34A)),
-                _buildMatchingResortChip('곤지암', '12명 대기', const Color(0xFF1E40AF)),
-                _buildMatchingResortChip('지산', '11명 대기', const Color(0xFF16A34A)),
-                _buildMatchingResortChip('모나용평', '9명 대기', const Color(0xFF0D9488)),
-                _buildMatchingResortChip('하이원', '8명 대기', const Color(0xFF6B21A8)),
-                _buildMatchingResortChip('웰리힐리', '7명 대기', const Color(0xFF0F766E)),
-                _buildMatchingResortChip('엘리시안', '6명 대기', const Color(0xFF4B5563)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
 
           // 매칭 시작 버튼
           SizedBox(
@@ -1730,33 +1671,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMatchingResortChip(String name, String count, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(count, style: const TextStyle(fontSize: 10.5, color: Colors.white70, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
