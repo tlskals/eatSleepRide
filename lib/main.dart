@@ -3526,43 +3526,48 @@ class _RideReviewListViewState extends State<RideReviewListView> {
             Row(
               children: [
                 CircleAvatar(
-                  radius: 18,
+                  radius: 17,
                   backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.1),
                   child: const Icon(Icons.person_outline_rounded, color: Color(0xFF2563EB), size: 18),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Text(
-                            review.authorName,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                          Flexible(
+                            child: Text(
+                              review.authorName,
+                              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black87),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                             decoration: BoxDecoration(
                               color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(5),
                             ),
                             child: Text(
                               review.resortName.split(' ')[0],
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
+                              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(timeStr, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500)),
+                      Text(timeStr, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                     ],
                   ),
                 ),
+                const SizedBox(width: 6),
                 // 설질 상태 뱃지
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                   decoration: BoxDecoration(
                     color: Colors.amber.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -3570,10 +3575,10 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                   ),
                   child: Text(
                     review.snowCondition,
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 2),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
                   padding: EdgeInsets.zero,
