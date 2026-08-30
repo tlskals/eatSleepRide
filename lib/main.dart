@@ -4496,6 +4496,76 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
     );
   }
 
+  void _showFullScreenTrailMapImage(BuildContext context, SkiResort resort) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: resort.themeColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.map_rounded, color: resort.themeColor, size: 20),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${resort.name} 슬로프 맵',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '💡 두 손가락으로 핀치 줌(확대/축소) 및 드래그 이동이 가능합니다.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 480,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 5.0,
+                      child: Image.asset(
+                        resort.trailMapAsset,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showResortDetailModal(BuildContext context, SkiResort resort) {
     final weather = _weathers[resort.id];
 
@@ -4723,7 +4793,86 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 2. 실시간 슬로프 웹캠 (CCTV)
+                  // 2. 스키장 슬로프 맵 (코스 안내도)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('🗺️ 슬로프 맵 (코스 안내도)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      GestureDetector(
+                        onTap: () => _showFullScreenTrailMapImage(context, resort),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.fullscreen_rounded, size: 14, color: Color(0xFF2563EB)),
+                              SizedBox(width: 3),
+                              Text('크게보기', style: TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _showFullScreenTrailMapImage(context, resort),
+                    child: Container(
+                      height: 200,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.grey.shade300),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(13),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.asset(
+                              resort.trailMapAsset,
+                              fit: BoxFit.contain,
+                            ),
+                            Positioned(
+                              right: 8,
+                              bottom: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.touch_app_rounded, color: Colors.white70, size: 11),
+                                    SizedBox(width: 3),
+                                    Text('터치하여 전체화면 확대 (핀치줌)', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 3. 실시간 슬로프 웹캠 (CCTV)
                   Row(
                     children: [
                       const Text('📹 실시간 슬로프 웹캠 (CCTV)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
@@ -4958,7 +5107,7 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
 }
 
 // -------------------------------------------------------------
-// 실시간 슬로프 현황판 & 드롭다운 슬로프 맵 위젯
+// 실시간 슬로프 현황판 위젯
 // -------------------------------------------------------------
 class DetailedSlopeStatusWidget extends StatefulWidget {
   final SkiResort resort;
@@ -4970,90 +5119,6 @@ class DetailedSlopeStatusWidget extends StatefulWidget {
 
 class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
   String _selectedSection = '전체';
-  String? _expandedSlopeName;
-
-  void _showFullScreenTrailMap(DetailedSlope slope) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: widget.resort.themeColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(Icons.map_rounded, color: widget.resort.themeColor, size: 20),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${widget.resort.name} 슬로프 맵',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            '📍 ${slope.name} (${slope.difficulty.label} • ${slope.length})',
-                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '💡 두 손가락으로 핀치 줌(확대/축소) 및 드래그 이동이 가능합니다.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: InteractiveViewer(
-                    minScale: 0.8,
-                    maxScale: 4.0,
-                    child: SlopeTrailMapWidget(
-                      resort: widget.resort,
-                      targetSlope: slope,
-                      isFullScreen: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _buildSpecChip('구역', slope.section, Colors.blueGrey.shade800),
-                    _buildSpecChip('난이도', slope.difficulty.label, slope.difficulty.color),
-                    if (slope.length.isNotEmpty) _buildSpecChip('길이', slope.length, Colors.blueGrey.shade800),
-                    _buildSpecChip('운영 상태', slope.status.label, slope.status.color),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -5152,7 +5217,7 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
         ),
         const SizedBox(height: 10),
 
-        // 세부 슬로프 카드 목록 (탭 시 슬로프맵 드롭다운 펼침)
+        // 깔끔한 슬로프 카드 목록
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -5160,216 +5225,98 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
           separatorBuilder: (context, idx) => const SizedBox(height: 8),
           itemBuilder: (context, idx) {
             final slope = filteredSlopes[idx];
-            final isExpanded = _expandedSlopeName == slope.name;
 
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isExpanded
-                      ? widget.resort.themeColor
-                      : (slope.status == SlopeStatus.closed
-                          ? Colors.grey.shade300
-                          : (slope.status == SlopeStatus.mogul ? Colors.orange.shade200 : Colors.grey.shade200)),
-                  width: isExpanded ? 1.5 : 1.0,
+                  color: slope.status == SlopeStatus.closed
+                      ? Colors.grey.shade300
+                      : (slope.status == SlopeStatus.mogul ? Colors.orange.shade200 : Colors.grey.shade200),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: isExpanded
-                        ? widget.resort.themeColor.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.02),
-                    blurRadius: isExpanded ? 8 : 4,
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    setState(() {
-                      if (_expandedSlopeName == slope.name) {
-                        _expandedSlopeName = null;
-                      } else {
-                        _expandedSlopeName = slope.name;
-                      }
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // 난이도 배지
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: slope.difficulty.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: slope.difficulty.color.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          slope.difficulty.label,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.difficulty.color),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // 슬로프 이름
+                      Expanded(
+                        child: Text(
+                          slope.name,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: slope.status == SlopeStatus.closed ? Colors.grey : Colors.black87,
+                            decoration: slope.status == SlopeStatus.closed ? TextDecoration.lineThrough : null,
+                          ),
+                        ),
+                      ),
+                      // 실시간 운용 상태 태그
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: slope.status.color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: slope.status.color.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // 난이도 배지
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: slope.difficulty.color.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: slope.difficulty.color.withValues(alpha: 0.3)),
-                              ),
-                              child: Text(
-                                slope.difficulty.label,
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.difficulty.color),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // 슬로프 이름
-                            Expanded(
-                              child: Text(
-                                slope.name,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: slope.status == SlopeStatus.closed ? Colors.grey : Colors.black87,
-                                  decoration: slope.status == SlopeStatus.closed ? TextDecoration.lineThrough : null,
-                                ),
-                              ),
-                            ),
-                            // 실시간 운용 상태 태그
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: slope.status.color.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: slope.status.color.withValues(alpha: 0.3)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(slope.status.icon, size: 12, color: slope.status.color),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    slope.status.label,
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.status.color),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            Icon(slope.status.icon, size: 12, color: slope.status.color),
                             const SizedBox(width: 4),
-                            Icon(
-                              isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                              color: isExpanded ? widget.resort.themeColor : Colors.grey.shade400,
-                              size: 20,
+                            Text(
+                              slope.status.label,
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.status.color),
                             ),
                           ],
                         ),
-                        // 서브타이틀: 길이 & 구역 정보만 깔끔하게 노출 (노트 설명 텍스트 제거)
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            if (slope.length.isNotEmpty) ...[
-                              Icon(Icons.straighten_rounded, size: 13, color: Colors.grey.shade500),
-                              const SizedBox(width: 3),
-                              Text(slope.length, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
-                              Text('  •  ', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-                            ],
-                            Text(slope.section, style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade600)),
-                            const Spacer(),
-                            Row(
-                              children: [
-                                Icon(Icons.map_outlined, size: 12, color: isExpanded ? widget.resort.themeColor : Colors.blue.shade600),
-                                const SizedBox(width: 2),
-                                Text(
-                                  isExpanded ? '맵 접기' : '슬로프 맵 위치',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isExpanded ? widget.resort.themeColor : Colors.blue.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        // 드롭다운 슬로프 맵 영역
-                        if (isExpanded) ...[
-                          const SizedBox(height: 12),
-                          const Divider(height: 1),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '🗺️ ${widget.resort.shortName} 슬로프 맵 위치',
-                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                              ),
-                              GestureDetector(
-                                onTap: () => _showFullScreenTrailMap(slope),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.blue.shade200),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.fullscreen_rounded, size: 13, color: Color(0xFF2563EB)),
-                                      SizedBox(width: 2),
-                                      Text('크게보기', style: TextStyle(fontSize: 10.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: () => _showFullScreenTrailMap(slope),
-                            child: SlopeTrailMapWidget(
-                              resort: widget.resort,
-                              targetSlope: slope,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              _buildSpecChip('구역', slope.section, Colors.blueGrey.shade800),
-                              _buildSpecChip('난이도', slope.difficulty.label, slope.difficulty.color),
-                              if (slope.length.isNotEmpty) _buildSpecChip('길이', slope.length, Colors.blueGrey.shade800),
-                              _buildSpecChip('운영 상태', slope.status.label, slope.status.color),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      if (slope.length.isNotEmpty) ...[
+                        Icon(Icons.straighten_rounded, size: 13, color: Colors.grey.shade500),
+                        const SizedBox(width: 3),
+                        Text(slope.length, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                        Text('  •  ', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+                      ],
+                      Icon(Icons.location_on_outlined, size: 13, color: Colors.grey.shade500),
+                      const SizedBox(width: 2),
+                      Text(slope.section, style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade600)),
+                    ],
+                  ),
+                ],
               ),
             );
           },
         ),
       ],
-    );
-  }
-
-  Widget _buildSpecChip(String title, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$title: ', style: const TextStyle(fontSize: 10.5, color: Colors.black54)),
-          Text(value, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
     );
   }
 
@@ -5386,343 +5333,6 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
   Widget _buildDivider() {
     return Container(width: 1, height: 20, color: Colors.grey.shade300);
   }
-}
-
-// -------------------------------------------------------------
-// 슬로프 맵 커스텀 페인터 & 뷰어
-// -------------------------------------------------------------
-class ResortTrailMapPainter extends CustomPainter {
-  final SkiResort resort;
-  final DetailedSlope targetSlope;
-
-  ResortTrailMapPainter({
-    required this.resort,
-    required this.targetSlope,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // 1. 설산 배경 그라데이션
-    final bgPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFF0F172A),
-          Color(0xFF1E293B),
-          Color(0xFF334155),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), const Radius.circular(12)), bgPaint);
-
-    // 2. 뒤편 설산 실루엣
-    final farMountain = Path()
-      ..moveTo(0, h * 0.70)
-      ..lineTo(w * 0.25, h * 0.25)
-      ..lineTo(w * 0.50, h * 0.15)
-      ..lineTo(w * 0.75, h * 0.28)
-      ..lineTo(w, h * 0.65)
-      ..lineTo(w, h)
-      ..lineTo(0, h)
-      ..close();
-    canvas.drawPath(farMountain, Paint()..color = const Color(0xFF1E293B).withValues(alpha: 0.9));
-
-    // 3. 메인 설산 능선
-    final mountainSnow = Path()
-      ..moveTo(w * 0.05, h * 0.90)
-      ..quadraticBezierTo(w * 0.28, h * 0.35, w * 0.50, h * 0.12)
-      ..quadraticBezierTo(w * 0.72, h * 0.35, w * 0.95, h * 0.90)
-      ..lineTo(w, h)
-      ..lineTo(0, h)
-      ..close();
-    canvas.drawPath(
-      mountainSnow,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFF8FAFC),
-            Color(0xFFE2E8F0),
-            Color(0xFFCBD5E1),
-          ],
-        ).createShader(Rect.fromLTWH(0, 0, w, h)),
-    );
-
-    // 4. 슬로프 피스트(Piste) 코스 라인 그리기
-    final List<DetailedSlope> slopes = resort.detailedSlopes;
-    for (final s in slopes) {
-      final isTarget = s.name == targetSlope.name;
-      final startX = w * 0.50;
-      final startY = h * 0.12;
-      final endX = w * s.effectiveMapX;
-      final endY = h * s.effectiveMapY;
-
-      final trailPath = Path()
-        ..moveTo(startX, startY)
-        ..cubicTo(
-          startX + (endX - startX) * 0.3,
-          startY + (endY - startY) * 0.5,
-          endX - (endX - startX) * 0.2,
-          startY + (endY - startY) * 0.8,
-          endX,
-          endY,
-        );
-
-      final strokeColor = isTarget
-          ? s.difficulty.color
-          : s.difficulty.color.withValues(alpha: 0.45);
-      final strokeWidth = isTarget ? 4.5 : 2.0;
-
-      canvas.drawPath(
-        trailPath,
-        Paint()
-          ..color = strokeColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = strokeWidth
-          ..strokeCap = StrokeCap.round,
-      );
-
-      // 슬로프 위치 도트
-      canvas.drawCircle(
-        Offset(endX, endY),
-        isTarget ? 6.0 : 3.0,
-        Paint()..color = isTarget ? s.difficulty.color : Colors.white70,
-      );
-    }
-
-    // 5. 곤돌라 / 리프트 라인
-    final liftPaint = Paint()
-      ..color = Colors.amber.shade700
-      ..strokeWidth = 1.6
-      ..style = PaintingStyle.stroke;
-    final liftPath = Path()
-      ..moveTo(w * 0.50, h * 0.90)
-      ..lineTo(w * 0.50, h * 0.14);
-    canvas.drawPath(liftPath, liftPaint);
-
-    for (double f = 0.3; f <= 0.8; f += 0.25) {
-      canvas.drawLine(
-        Offset(w * 0.50 - 6, h * f),
-        Offset(w * 0.50 + 6, h * f),
-        Paint()..color = Colors.amber.shade900..strokeWidth = 2,
-      );
-      canvas.drawCircle(Offset(w * 0.50, h * f + 4), 2.5, Paint()..color = Colors.amber.shade400);
-    }
-
-    // 6. 정상 표시 (Summit)
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    textPainter.text = TextSpan(
-      text: '🏔️ ${resort.shortName} 정상',
-      style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(w * 0.50 - textPainter.width / 2, h * 0.04));
-
-    // 7. 베이스 하우스 표시
-    final baseRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(w * 0.50, h * 0.94), width: 90, height: 16),
-      const Radius.circular(4),
-    );
-    canvas.drawRRect(baseRect, Paint()..color = Colors.blueGrey.shade900);
-    textPainter.text = const TextSpan(
-      text: '🏢 베이스 스키하우스',
-      style: TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.w600),
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(w * 0.50 - textPainter.width / 2, h * 0.94 - textPainter.height / 2));
-  }
-
-  @override
-  bool shouldRepaint(covariant ResortTrailMapPainter oldDelegate) {
-    return oldDelegate.targetSlope.name != targetSlope.name ||
-        oldDelegate.resort.id != resort.id;
-  }
-}
-
-class SlopeTrailMapWidget extends StatelessWidget {
-  final SkiResort resort;
-  final DetailedSlope targetSlope;
-  final bool isFullScreen;
-
-  const SlopeTrailMapWidget({
-    super.key,
-    required this.resort,
-    required this.targetSlope,
-    this.isFullScreen = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final mapHeight = isFullScreen ? 450.0 : 200.0;
-
-    return Container(
-      height: mapHeight,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(11),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 1. 공식 스키장 슬로프 맵 고화질 이미지
-            Image.asset(
-              resort.trailMapAsset,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                // Fallback to stylized custom painter if asset not found
-                return CustomPaint(
-                  painter: ResortTrailMapPainter(
-                    resort: resort,
-                    targetSlope: targetSlope,
-                  ),
-                );
-              },
-            ),
-
-            // 2. 타겟 슬로프 위치 핀 & 콜아웃 배지
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final w = constraints.maxWidth;
-                final h = constraints.maxHeight;
-                final rawX = w * targetSlope.effectiveMapX;
-                final rawY = h * targetSlope.effectiveMapY;
-
-                final posX = (rawX - 55).clamp(8.0, w - 135.0);
-                final posY = (rawY - 42).clamp(10.0, h - 45.0);
-
-                return Stack(
-                  children: [
-                    // 깜빡이는 펄스 링
-                    Positioned(
-                      left: rawX - 10,
-                      top: rawY - 10,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: targetSlope.difficulty.color.withValues(alpha: 0.4),
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: targetSlope.difficulty.color.withValues(alpha: 0.8),
-                              blurRadius: 8,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // 콜아웃 핀 배지
-                    Positioned(
-                      left: posX,
-                      top: posY,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A).withValues(alpha: 0.92),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: targetSlope.difficulty.color, width: 1.5),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.6),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text('📍 ', style: TextStyle(fontSize: 10)),
-                                Text(
-                                  targetSlope.name,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                if (targetSlope.length.isNotEmpty) ...[
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    '(${targetSlope.length})',
-                                    style: TextStyle(fontSize: 9.5, color: Colors.blue.shade200, fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          CustomPaint(
-                            size: const Size(8, 5),
-                            painter: _TrianglePainter(color: targetSlope.difficulty.color),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            // 3. 우측 상단 공식 슬로프맵 배지
-            Positioned(
-              right: 8,
-              top: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.map_rounded, color: Colors.white70, size: 12),
-                    const SizedBox(width: 3),
-                    Text(
-                      '${resort.shortName} 공식 슬로프맵',
-                      style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TrianglePainter extends CustomPainter {
-  final Color color;
-  _TrianglePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color;
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // -------------------------------------------------------------
