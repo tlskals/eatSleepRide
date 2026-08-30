@@ -978,7 +978,7 @@ const List<SkiResort> kSkiResorts = [
     detailedSlopes: [
       DetailedSlope(name: '빅토리아 1', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, length: '1,439m', note: '하이원 최고 경사 절벽 카빙 사면'),
       DetailedSlope(name: '빅토리아 2', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '1,300m', note: '상단 모굴 전용 코스'),
-      DetailedSlope(name: '빅토리아 3', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, length: '1,150m', note: '밸리허브 다운힐 테크니컬'),
+      DetailedSlope(name: '빅토리아 3', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.closed, length: '1,150m', note: '영구 폐쇄 / 미운영 (안전 사유)'),
       DetailedSlope(name: '헤라 1', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.intermediate, length: '1,504m', note: '마운틴탑~허브 최고의 광폭 크루징'),
       DetailedSlope(name: '헤라 2', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.advanced, status: SlopeStatus.mogul, length: '1,230m', note: '시즌 후반 모굴 & 테크니컬 전용 운영'),
       DetailedSlope(name: '헤라 3', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,100m', note: '헤라 리프트 상단 급사면'),
@@ -1170,27 +1170,6 @@ const List<SkiResort> kSkiResorts = [
     webcams: [
       SkiWebcam(name: 'A / G 상급 슬로프', location: '마운틴 정상', streamUrl: 'https://www.oakvalley.co.kr'),
       SkiWebcam(name: '골프빌리지 베이스', location: '스키빌리지 중앙 광장', streamUrl: 'https://www.oakvalley.co.kr'),
-    ],
-  ),
-  SkiResort(
-    id: 'edenvalley',
-    name: '에덴밸리 (양산)',
-    shortName: '에덴밸리',
-    region: '경남 양산',
-    lat: 35.4312,
-    lng: 128.9868,
-    icon: Icons.downhill_skiing_rounded,
-    themeColor: Color(0xFF059669),
-    detailedSlopes: [
-      DetailedSlope(name: '베이직 (Basic)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '600m', note: '영남권 메인 초급 강습 코스'),
-      DetailedSlope(name: '메인 (Main)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '950m', note: '에덴밸리 대표 와이드 슬로프'),
-      DetailedSlope(name: '쥬피터 (Jupiter)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m', note: '고속 크루징 및 카빙 코스'),
-      DetailedSlope(name: '새턴 (Saturn)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '800m', note: '영남권 최고 난이도 직벽'),
-      DetailedSlope(name: '우라누스 (Uranus)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '테크니컬 사면'),
-    ],
-    availableTimeSlots: ['주간 (09:30~17:00)', '야간 (18:30~23:00)', '심야 (23:00~01:30)'],
-    webcams: [
-      SkiWebcam(name: '메인 슬로프 베이스', location: '에덴밸리 스키하우스 정면', streamUrl: 'https://www.edenvalley.co.kr'),
     ],
   ),
 ];
