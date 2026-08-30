@@ -191,18 +191,78 @@ class NotificationService {
     );
   }
 
-  /// 🚀 실시간 알림 전송 (동행 참여, 새 메시지, 매칭 완료 시 Firestore 및 로컬 알림 연동)
+  StreamSubscription<QuerySnapshot>? _realtimeNotificationSub;
+
+  /// 📲 실시간 기기 간 알림 리스너 (상대방이 보낸 알림만 내 기기에 수신)
+  void startRealtimeNotificationListener(String currentNickname) {
+    _realtimeNotificationSub?.cancel();
+    if (currentNickname.isEmpty) return;
+
+    debugPrint('🔔 [NotificationListener] 실시간 알림 수신 대기 시작: $currentNickname');
+    final listenStartTime = DateTime.now().subtract(const Duration(seconds: 5));
+
+    _realtimeNotificationSub = FirebaseFirestore.instance
+        .collection('notifications')
+        .snapshots()
+        .listen((snapshot) {
+      for (final change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final data = change.doc.data();
+          if (data == null) continue;
+
+          final sender = data['sender'] as String? ?? '';
+          // 🛡️ 내가 보낸 알림은 내 기기에 절대 띄우지 않음!
+          if (sender == currentNickname) continue;
+
+          final targetAuthor = data['targetAuthor'] as String? ?? '';
+          final targetParticipants = (data['targetParticipants'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [targetAuthor];
+
+          // 🎯 수신 대상에 내 닉네임이 포함되어 있는지 확인
+          if (!targetParticipants.contains(currentNickname) && targetAuthor != currentNickname) {
+            continue;
+          }
+
+          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+          if (createdAt != null && createdAt.isBefore(listenStartTime)) {
+            continue; // 과거 알림은 무시
+          }
+
+          final title = data['title'] as String? ?? '같이타요 알림';
+          final body = data['body'] as String? ?? '';
+          final postId = data['postId'] as String?;
+
+          debugPrint('🔔 [Cross-Device Notification] 수신 알림 트리거: $title - $body');
+          showLocalNotification(
+            title: title,
+            body: body,
+            payload: postId,
+          );
+        }
+      }
+    });
+  }
+
+  /// 🚀 실시간 알림 전송 (상대방 기기에 푸시 전송, 발신자 기기에는 미노출)
   Future<void> notifyRider({
+    required String senderNickname,
     required String targetAuthorName,
     required String title,
     required String body,
     String type = 'ride_join',
     String? postId,
+    List<String>? targetParticipants,
   }) async {
     try {
-      // 1. Firestore notifications 컬렉션에 기록
+      final participants = targetParticipants ?? [targetAuthorName];
+
+      // 1. Firestore notifications 컬렉션에 기록 (수신 대상 기기들이 실시간으로 수신)
       await FirebaseFirestore.instance.collection('notifications').add({
+        'sender': senderNickname,
         'targetAuthor': targetAuthorName,
+        'targetParticipants': participants,
         'title': title,
         'body': body,
         'type': type,
@@ -211,12 +271,7 @@ class NotificationService {
         'isRead': false,
       });
 
-      // 2. 즉시 로컬 알림 배너 트리거 (동행 피드백 즉시 확인용)
-      await showLocalNotification(
-        title: title,
-        body: body,
-        payload: postId,
-      );
+      // ⚠️ 발신자(Sender) 본인 기기에서는 showLocalNotification을 호출하지 않습니다.
     } catch (e) {
       debugPrint('알림 전송 오류: $e');
     }

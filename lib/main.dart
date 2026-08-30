@@ -1384,6 +1384,9 @@ class _MainScreenState extends State<MainScreen> {
         });
       }
     });
+
+    // 🔔 기기 간 실시간 푸시 알림 리스너 시작 (상대방 알림만 수신)
+    NotificationService.instance.startRealtimeNotificationListener(gCurrentUser?.nickname ?? '');
   }
 
   @override
@@ -6922,6 +6925,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         setState(() {
                           gCurrentUser = acc;
                         });
+                        NotificationService.instance.startRealtimeNotificationListener(acc.nickname);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -7306,9 +7310,11 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
       AppFirebaseService.instance.toggleJoinRidePost(widget.post.id, myNickname);
     }
 
-    // 🔔 방장에게 동행 참가 푸시 알림 전송
+    // 🔔 방장에게 동행 참가 푸시 알림 전송 (상대방 기기만 수신)
     NotificationService.instance.notifyRider(
+      senderNickname: myNickname,
       targetAuthorName: widget.post.authorName,
+      targetParticipants: [widget.post.authorName],
       title: '🎉 [${widget.post.resortName.split(' ')[0]}] 동행 참가 알림',
       body: '\'$myNickname\' 님이 \'${widget.post.title}\' 모임에 참가했습니다!',
       type: 'ride_join',
@@ -7680,9 +7686,17 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       AppFirebaseService.instance.sendChatMessage(widget.post.id, newMsg);
     }
 
-    // 🔔 대화방 참가자 푸시 알림 전송
+    // 🔔 대화방 참가자들에게 푸시 알림 전송 (발신자 본인 기기 제외, 상대방 기기들만 수신)
+    final targetParticipants = List<String>.from(widget.post.participantNames);
+    if (!targetParticipants.contains(widget.post.authorName)) {
+      targetParticipants.add(widget.post.authorName);
+    }
+    targetParticipants.remove(myNickname);
+
     NotificationService.instance.notifyRider(
+      senderNickname: myNickname,
       targetAuthorName: widget.post.authorName,
+      targetParticipants: targetParticipants,
       title: '💬 [${widget.post.resortName.split(' ')[0]}] 새 메시지',
       body: '$myNickname: $text',
       type: 'chat_message',
