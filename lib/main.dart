@@ -3864,17 +3864,6 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${review.commentCount}',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                    ),
-                  ],
-                ),
                 const Spacer(),
                 Text(
                   '100% 실명 비공개',
