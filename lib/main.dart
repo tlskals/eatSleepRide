@@ -3564,21 +3564,6 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                // 설질 상태 뱃지
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Text(
-                    review.snowCondition,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
-                  ),
-                ),
-                const SizedBox(width: 2),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
                   padding: EdgeInsets.zero,
@@ -3660,19 +3645,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
             ),
             const SizedBox(height: 12),
 
-            // 2. 별점
-            Row(
-              children: List.generate(5, (starIdx) {
-                return Icon(
-                  starIdx < review.rating ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: Colors.amber,
-                  size: 18,
-                );
-              }),
-            ),
-            const SizedBox(height: 10),
-
-            // 3. 후기 본문 텍스트
+            // 후기 본문 텍스트
             Text(
               review.content,
               style: const TextStyle(fontSize: 14.5, color: Colors.black87, height: 1.45),
@@ -3928,22 +3901,12 @@ class WriteRideReviewScreen extends StatefulWidget {
 
 class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
   SkiResort _selectedResort = kSkiResorts.first;
-  String _selectedSnowCondition = '극상 파우더 ❄️';
-  int _rating = 5;
   final TextEditingController _contentController = TextEditingController();
   final List<String> _attachedPhotos = [];
   final List<XFile> _selectedFiles = [];
   final List<String> _selectedTags = [];
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
-
-  final List<String> _snowConditions = [
-    '극상 파우더 ❄️',
-    '압설 최상 🎿',
-    '약간 빙판 🧊',
-    '슬러시 ☀️',
-    '습설 🌨️',
-  ];
 
   final List<String> _samplePhotoPresets = [
     '정상 슬로프 파우더 뷰 ❄️',
@@ -4142,8 +4105,8 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
       id: '',
       authorName: gCurrentUser?.nickname ?? '익명의 라이더',
       resortName: _selectedResort.name,
-      snowCondition: _selectedSnowCondition,
-      rating: _rating,
+      snowCondition: '',
+      rating: 5,
       content: content,
       photoLabels: finalPhotoUrls,
       tags: List.from(_selectedTags),
@@ -4235,50 +4198,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
             ),
             const SizedBox(height: 20),
 
-            // 2. 설질 상태 선택
-            const Text('오늘의 설질 환경', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _snowConditions.map((cond) {
-                final isSelected = _selectedSnowCondition == cond;
-                return ChoiceChip(
-                  label: Text(cond),
-                  selected: isSelected,
-                  selectedColor: const Color(0xFF2563EB),
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : Colors.black87,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 13,
-                  ),
-                  onSelected: (selected) {
-                    if (selected) setState(() => _selectedSnowCondition = cond);
-                  },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-
-            // 3. 만족도 별점
-            const Text('라이딩 만족도', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(
-              children: List.generate(5, (index) {
-                final starVal = index + 1;
-                return IconButton(
-                  onPressed: () => setState(() => _rating = starVal),
-                  icon: Icon(
-                    starVal <= _rating ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: Colors.amber,
-                    size: 36,
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 20),
-
-            // 4. 슬로프 사진 첨부
+            // 2. 슬로프 사진 첨부
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
