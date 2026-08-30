@@ -2189,14 +2189,6 @@ class RidePostListView extends StatefulWidget {
 }
 
 class _RidePostListViewState extends State<RidePostListView> {
-  @override
-  void initState() {
-    super.initState();
-    if (gRidePosts.isEmpty) {
-      gRidePosts = createInitialSamplePosts();
-    }
-  }
-
   List<RidePost> get _myJoinedPosts =>
       gRidePosts.where((p) => p.canAccessChat).toList();
 
@@ -2267,10 +2259,6 @@ class _RidePostListViewState extends State<RidePostListView> {
 
   @override
   Widget build(BuildContext context) {
-    if (gRidePosts.isEmpty) {
-      gRidePosts = createInitialSamplePosts();
-    }
-
     final visiblePosts = gRidePosts.where((post) {
       if (post.shouldHide) return false;
       if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
@@ -2284,15 +2272,46 @@ class _RidePostListViewState extends State<RidePostListView> {
     return Scaffold(
       body: visiblePosts.isEmpty
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.snowboarding_rounded, size: 56, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  const Text('등록된 같이타요 모집글이 없습니다.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  const Text('첫 번째 슬로프 메이트 모집글을 작성해보세요!', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.snowboarding_rounded, size: 52, color: Color(0xFF2563EB)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('등록된 같이타요 모집글이 없습니다', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '내가 원하는 스키장과 시간대를 정해\n첫 번째 슬로프 메이트 모집글을 올려보세요!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const WriteRidePostScreen()),
+                        ).then((_) => setState(() {}));
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('첫 메이트 모집글 작성하기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
               ),
             )
           : ListView.builder(
@@ -3318,21 +3337,51 @@ class _RideReviewListViewState extends State<RideReviewListView> {
           Expanded(
             child: filteredReviews.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.photo_camera_back_outlined, size: 56, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                          '[$_selectedResort] 등록된 후기가 없습니다.',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          '첫 번째 슬로프 사진과 설질 후기를 남겨보세요!',
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                      ],
+                    child: Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.photo_camera_back_outlined, size: 52, color: Color(0xFF2563EB)),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            '[$_selectedResort] 등록된 후기가 없습니다',
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '오늘의 생생한 슬로프 현장 사진과\n설질 후기를 첫 번째로 공유해보세요! (+100P 지급)',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const WriteRideReviewScreen()),
+                              ).then((_) {
+                                if (mounted) setState(() {});
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            icon: const Icon(Icons.add_photo_alternate_rounded, size: 18),
+                            label: const Text('첫 설질 후기 & 사진 등록하기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -5904,7 +5953,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   const SizedBox(height: 24),
 
-                  // 6. 계정 관리
+                  // 6. 🛠️ QA & 자체 테스트 도구 (Sandbox)
+                  _buildSectionTitle('🛠️ 개발자 & 자체 테스트 도구 (Sandbox)'),
+                  const SizedBox(height: 8),
+                  _buildQASandboxCard(),
+
+                  const SizedBox(height: 24),
+
+                  // 7. 계정 관리
                   _buildSectionTitle('계정 관리'),
                   const SizedBox(height: 8),
                   _buildAccountCard(user),
@@ -6603,6 +6659,287 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  // -------------------------------------------------------------
+  // 🛠️ QA / 자체 테스트 샌드박스 도구 위젯
+  // -------------------------------------------------------------
+  Widget _buildQASandboxCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF38BDF8), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.handyman_rounded, color: Color(0xFF38BDF8), size: 20),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '🛠️ QA & 자체 테스트 도구 (Sandbox)',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: Colors.greenAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('DEBUG', style: TextStyle(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            '목데이터를 비워 백지 상태에서 글을 써보거나, 여러 계정을 넘나들며 혼자서도 2인 이상의 실시간 동행/참가/채팅 시뮬레이션을 완벽하게 테스트할 수 있습니다.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.4),
+          ),
+          const SizedBox(height: 14),
+
+          // 도구 1: 목데이터 비우기 (클린 백지 모드) & 복원
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFF87171),
+                    side: const BorderSide(color: Color(0xFFF87171)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      gRidePosts.clear();
+                      gRideReviews.clear();
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFF991B1B),
+                        content: Text('🧹 모든 샘플 글/후기를 비웠습니다. (백지 클린 모드) 직접 첫 글을 작성해보세요!'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                  label: const Text('목데이터 비우기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E293B),
+                    foregroundColor: const Color(0xFF38BDF8),
+                    side: const BorderSide(color: Color(0xFF38BDF8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      gRidePosts = createInitialSamplePosts();
+                      gRideReviews = [
+                        RideReview(
+                          id: 'rev_1',
+                          authorName: '익명의라이더#8192',
+                          resortName: '모나용평 (평창)',
+                          snowCondition: '극상 파우더 ❄️',
+                          rating: 5,
+                          content: '오늘 4인 랜덤매칭으로 만난 메이트분들과 메가그린이랑 레드 탔는데 설질 진짜 미쳤습니다 ㅠㅠ 다들 친절하셔서 인생샷도 찍어주시고 꿀잼이었어요! 다음 주에 또 봬요 🙌',
+                          photoLabels: ['용평 레드 정상 파우더 뷰 ❄️', '4인 메이트 슬로프 단체샷 🏂'],
+                          tags: ['#4인랜덤매칭후기', '#용평레드', '#설질대박', '#오후라이딩'],
+                          createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+                          likeCount: 24,
+                          commentCount: 5,
+                        ),
+                        RideReview(
+                          id: 'rev_2',
+                          authorName: '익명의라이더#4120',
+                          resortName: '비발디파크 (홍천)',
+                          snowCondition: '야간 압설 굿 🎿',
+                          rating: 5,
+                          content: '퇴근하고 비발디 야간 땡보딩 왔습니다! 테크노 슬로프 사람도 많이 없고 엣지 촥촥 박히네요 ㅎㅎ 같이타요 모집글 보고 합류했는데 시간 가는 줄 몰랐네요.',
+                          photoLabels: ['비발디 테크노 야간 조명 🌙', '베이스 스키하우스 앞 ☕️'],
+                          tags: ['#비발디야간', '#테크노', '#퇴근보딩', '#메이트모임'],
+                          createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+                          likeCount: 18,
+                          commentCount: 3,
+                        ),
+                      ];
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFF065F46),
+                        content: Text('📦 샘플 테스트 데이터가 정상 복원되었습니다.'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.restore_rounded, size: 16),
+                  label: const Text('샘플 데이터 복원', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // 도구 2: 계정 즉시 전환 (방장 ↔ 참가자 1인 멀티플레이어 시뮬레이션)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _showSwitchAccountDialog,
+              icon: const Icon(Icons.switch_account_rounded, size: 18),
+              label: Text(
+                '🎭 계정 즉시 전환 (현재: ${gCurrentUser?.nickname ?? "로그아웃"})',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSwitchAccountDialog() {
+    final accounts = [
+      UserProfile(
+        id: 'user_pyeongchang_1',
+        provider: SocialAuthProvider.kakao,
+        email: 'pyeongchang@kakao.com',
+        nickname: '평창눈사람 (방장)',
+        preferredDiscipline: '스키',
+        homeResort: '모나용평',
+        level: '중급',
+        joinedAt: DateTime(2026, 1, 1),
+        riderTitle: '골드 라이더 🏂',
+      ),
+      UserProfile(
+        id: 'user_gonjiam_2',
+        provider: SocialAuthProvider.apple,
+        email: 'gonjiam@apple.com',
+        nickname: '곤지암라이더 (상급자)',
+        preferredDiscipline: '스노보드',
+        homeResort: '곤지암리조트',
+        level: '상급',
+        joinedAt: DateTime(2026, 1, 10),
+        riderTitle: '플래티넘 마스터 ⛷️',
+      ),
+      UserProfile(
+        id: 'user_vivaldi_3',
+        provider: SocialAuthProvider.naver,
+        email: 'vivaldi@naver.com',
+        nickname: '비발디보더 (참가자)',
+        preferredDiscipline: '스노보드',
+        homeResort: '비발디파크',
+        level: '초중급',
+        joinedAt: DateTime(2026, 2, 1),
+        riderTitle: '실버 라이더 🏂',
+      ),
+      UserProfile(
+        id: 'user_new_4',
+        provider: SocialAuthProvider.kakao,
+        email: 'newbie@kakao.com',
+        nickname: '익명의새내기#1234',
+        preferredDiscipline: '스노보드',
+        homeResort: '하이원리조트',
+        level: '초급',
+        joinedAt: DateTime.now(),
+        riderTitle: '새싹 라이더 🌱',
+      ),
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.switch_account_rounded, color: Color(0xFF2563EB), size: 22),
+              SizedBox(width: 8),
+              Text('테스트 계정 전환', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '계정을 전환하여 내가 올린 글에 다른 사람인 척 참가 신청하거나 1:1 대화방 채팅을 테스트할 수 있습니다.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.35),
+                ),
+                const SizedBox(height: 12),
+                ...accounts.map((acc) {
+                  final isCurrent = gCurrentUser?.nickname == acc.nickname;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    decoration: BoxDecoration(
+                      color: isCurrent ? const Color(0xFFEFF6FF) : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isCurrent ? const Color(0xFF2563EB) : Colors.grey.shade200,
+                        width: isCurrent ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        backgroundColor: acc.providerColor,
+                        radius: 14,
+                        child: Text(
+                          acc.provider == SocialAuthProvider.kakao ? 'K' : (acc.provider == SocialAuthProvider.naver ? 'N' : ''),
+                          style: TextStyle(color: acc.providerTextColor, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      title: Text(acc.nickname, style: TextStyle(fontWeight: FontWeight.bold, color: isCurrent ? const Color(0xFF2563EB) : Colors.black87)),
+                      subtitle: Text('${acc.homeResort} • ${acc.preferredDiscipline} • ${acc.level}', style: const TextStyle(fontSize: 11)),
+                      trailing: isCurrent ? const Icon(Icons.check_circle, color: Color(0xFF2563EB), size: 18) : null,
+                      onTap: () {
+                        setState(() {
+                          gCurrentUser = acc;
+                        });
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFF1E3A8A),
+                            content: Text('\'${acc.nickname}\' 계정으로 즉시 전환되었습니다.'),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
