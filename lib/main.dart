@@ -415,6 +415,7 @@ class RidePost {
   bool isJoined;
   bool isAuthor;
   final List<ChatMessage> chatMessages;
+  int unreadCount; // 💬 읽지 않은 신규 메시지 수
 
   // 🚨 실시간 신고 및 3회 누적 자동 블라인드
   int reportCount;
@@ -440,6 +441,7 @@ class RidePost {
     this.isJoined = false,
     this.isAuthor = false,
     required this.chatMessages,
+    this.unreadCount = 0,
     this.reportCount = 0,
     this.isBlinded = false,
     List<String>? reportedUserIds,
@@ -2219,7 +2221,19 @@ class _RidePostListViewState extends State<RidePostListView> {
                     ),
                     title: Text(post.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1),
                     subtitle: Text('${post.resortName.split(' ')[0]} • ${post.currentMembers}/${post.maxMembers + 1}명', style: const TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: post.unreadCount > 0
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${post.unreadCount}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        : const Icon(Icons.chevron_right),
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
@@ -2248,7 +2262,8 @@ class _RidePostListViewState extends State<RidePostListView> {
       return true;
     }).toList();
 
-    final joinedCount = _myJoinedPosts.length;
+    final joinedPosts = _myJoinedPosts;
+    final totalUnreadCount = joinedPosts.fold<int>(0, (sum, p) => sum + p.unreadCount);
 
     return Scaffold(
       body: visiblePosts.isEmpty
@@ -2307,11 +2322,24 @@ class _RidePostListViewState extends State<RidePostListView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (joinedCount > 0) ...[
-            Badge(
-              label: Text('$joinedCount', style: const TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.redAccent,
-              child: FloatingActionButton(
+          if (joinedPosts.isNotEmpty) ...[
+            if (totalUnreadCount > 0)
+              Badge(
+                label: Text('$totalUnreadCount', style: const TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.redAccent,
+                child: FloatingActionButton(
+                  heroTag: 'floating_chat_button_hub',
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF2563EB),
+                  elevation: 4,
+                  shape: const CircleBorder(side: BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                  onPressed: _openMyChatRoomsModal,
+                  tooltip: '참여 중인 대화방 바로가기',
+                  child: const Icon(Icons.chat_bubble_rounded),
+                ),
+              )
+            else
+              FloatingActionButton(
                 heroTag: 'floating_chat_button_hub',
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF2563EB),
@@ -2321,7 +2349,6 @@ class _RidePostListViewState extends State<RidePostListView> {
                 tooltip: '참여 중인 대화방 바로가기',
                 child: const Icon(Icons.chat_bubble_rounded),
               ),
-            ),
             const SizedBox(height: 12),
           ],
           FloatingActionButton.extended(
@@ -7645,6 +7672,12 @@ class ChatRoomScreen extends StatefulWidget {
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.post.unreadCount = 0;
+  }
 
   @override
   void dispose() {
