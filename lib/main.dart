@@ -1489,6 +1489,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final recentPosts = gRidePosts.where((post) {
+      if (post.purpose.contains('랜덤')) return false;
       if (post.shouldHide) return false;
       if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
         return false;
@@ -2321,6 +2322,7 @@ class _RidePostListViewState extends State<RidePostListView> {
   @override
   Widget build(BuildContext context) {
     final visiblePosts = gRidePosts.where((post) {
+      if (post.purpose.contains('랜덤')) return false; // 🚫 4인 랜덤매칭 대화방은 일반 모집글 피드에서 제외
       if (post.shouldHide) return false;
       if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
         return false;
@@ -2399,7 +2401,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                 shape: const CircleBorder(side: BorderSide(color: Color(0xFF2563EB), width: 1.5)),
                 onPressed: _openMyChatRoomsModal,
                 tooltip: '참여 중인 대화방 바로가기',
-                child: const Icon(Icons.mark_chat_unread_rounded, size: 26),
+                child: const Icon(Icons.chat_bubble_rounded),
               ),
             ),
             const SizedBox(height: 12),
@@ -2449,29 +2451,33 @@ class _RidePostListViewState extends State<RidePostListView> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: const Color(0xFF2563EB).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       post.resortName.split(' ')[0],
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '${post.discipline}(${post.style}) • ${post.skillLevel}',
-                      style: TextStyle(fontSize: 11.5, color: Colors.grey.shade800, fontWeight: FontWeight.w500),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${post.discipline}(${post.style}) • ${post.skillLevel}',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade800, fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 5),
                   if (post.isAuthor)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -2479,7 +2485,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                         color: const Color(0xFF2563EB).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('내가 쓴 글', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                      child: const Text('내가 쓴 글', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
                     )
                   else if (post.isJoined)
                     Container(
@@ -2488,29 +2494,30 @@ class _RidePostListViewState extends State<RidePostListView> {
                         color: Colors.green.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('참여 중', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.green)),
+                      child: const Text('참여 중', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
                     ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
                       color: post.isFull ? Colors.red.shade50 : Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: post.isFull ? Colors.red.shade200 : Colors.green.shade200),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.person, size: 12, color: post.isFull ? Colors.red.shade700 : Colors.green.shade700),
-                        const SizedBox(width: 2),
+                        Icon(Icons.person, size: 10.5, color: post.isFull ? Colors.red.shade700 : Colors.green.shade700),
+                        const SizedBox(width: 1.5),
                         Text(
                           '${post.currentMembers}/${post.maxMembers + 1}명',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: post.isFull ? Colors.red.shade800 : Colors.green.shade800),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: post.isFull ? Colors.red.shade800 : Colors.green.shade800),
                         ),
                       ],
                     ),
                   ),
                   if (!post.isAuthor) ...[
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 1),
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
                       padding: EdgeInsets.zero,
@@ -2610,18 +2617,17 @@ class _RidePostListViewState extends State<RidePostListView> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.access_time_rounded, size: 14, color: Colors.grey.shade500),
+                  const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
                   const SizedBox(width: 4),
-                  Text(
-                    '${post.dateText} ${post.timeSlot}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  Expanded(
+                    child: Text(
+                      '${post.dateText} ${post.timeSlot} • ${post.authorName}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '• ${post.authorName}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   const Text('상세보기 >', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
                 ],
               ),
