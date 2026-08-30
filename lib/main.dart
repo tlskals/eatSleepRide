@@ -645,6 +645,7 @@ UserProfile? gCurrentUser = UserProfile(
 // 1일 랜덤 매칭 횟수 제한 (클린한 만남 & 어뷰징 방지)
 int gDailyRandomMatchLimit = 1;
 int gDailyRandomMatchRemaining = 1;
+DateTime? gPostBanUntil; // 🚨 랜덤 매칭 중도 퇴장 탈주 시 2시간 작성/참여 페널티 만료 시간
 
 // -------------------------------------------------------------
 // 같이 탔어요 (후기 & 설질 피드) 데이터 모델
@@ -6877,6 +6878,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 8),
+
+          // 도구 3: 탈주 페널티 해제 및 1일 1회 매칭 티켓 충전
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF38BDF8),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              onPressed: () {
+                setState(() {
+                  gPostBanUntil = null;
+                  gDailyRandomMatchRemaining = 1;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Color(0xFF0284C7),
+                    content: Text('⚡ [테스트] 2시간 탈주 페널티 해제 & 랜덤 매칭 기회가 1회 충전되었습니다.'),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.bolt_rounded, size: 16),
+              label: const Text('⚡ 페널티 해제 & 오늘 매칭 기회 1회 충전', style: TextStyle(fontSize: 11.5)),
+            ),
+          ),
         ],
       ),
     );
@@ -7273,6 +7300,17 @@ class RidePostDetailScreen extends StatefulWidget {
 
 class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
   void _joinRide() {
+    if (gPostBanUntil != null && DateTime.now().isBefore(gPostBanUntil!)) {
+      final remainingMin = gPostBanUntil!.difference(DateTime.now()).inMinutes;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade800,
+          content: Text('🚨 랜덤 매칭 중도 퇴장 페널티로 인해 앞으로 ${remainingMin + 1}분 동안 참가 신청이 제한됩니다.'),
+        ),
+      );
+      return;
+    }
+
     if (widget.post.isFull) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('모집 정원이 마감되었습니다.')),
@@ -7843,8 +7881,174 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
+  void _confirmLeaveChatRoom() {
+    final isRandomMatch = widget.post.purpose.contains('랜덤');
+
+    if (isRandomMatch) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+              SizedBox(width: 8),
+              Text('랜덤 매칭 대화방 퇴장 경고', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '🚨 지금 퇴장 시 아래 페널티가 즉시 적용됩니다:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.red),
+                    ),
+                    SizedBox(height: 8),
+                    Text('1. ⚡ 오늘의 4인 랜덤 매칭 기회 즉시 소멸 (금일 재매칭 불가)', style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.35)),
+                    SizedBox(height: 4),
+                    Text('2. ⏱️ 향후 2시간 동안 모든 메이트 모집글 작성 및 참여 제한', style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.35)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '다른 메이트들의 소중한 라이딩 시간을 보호하기 위해 무분별한 중도 퇴장을 제한하고 있습니다.\n\n정말 대화방에서 퇴장하시겠습니까?',
+                style: TextStyle(fontSize: 12.5, color: Colors.grey, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('계속 대화하기', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                _executeLeave(isRandomMatch: true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('경고 확인 후 퇴장'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('대화방 나가기', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text('대화방에서 나가시겠습니까? 나가시면 참여 목록에서 제외됩니다.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                _executeLeave(isRandomMatch: false);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('나가기'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _executeLeave({required bool isRandomMatch}) {
+    final myNickname = gCurrentUser?.nickname ?? '익명의 라이더';
+    setState(() {
+      widget.post.participantNames.remove(myNickname);
+      widget.post.currentMembers = (widget.post.currentMembers - 1).clamp(1, 4);
+      widget.post.isJoined = false;
+
+      final sysMsg = ChatMessage(
+        sender: '시스템',
+        text: isRandomMatch
+            ? '⚠️ $myNickname 님이 대화방을 퇴장하셨습니다 (현재 ${widget.post.currentMembers}명).\n상단 버튼을 눌러 1명을 즉시 충원하거나 3명이서 라이딩을 진행할 수 있습니다 ⛷️'
+            : '⚠️ $myNickname 님이 대화방을 퇴장하셨습니다.',
+        time: DateTime.now(),
+        isSystem: true,
+      );
+      widget.post.chatMessages.add(sysMsg);
+      if (widget.post.id.isNotEmpty) {
+        AppFirebaseService.instance.sendChatMessage(widget.post.id, sysMsg);
+      }
+    });
+
+    if (isRandomMatch) {
+      gDailyRandomMatchRemaining = 0;
+      gPostBanUntil = DateTime.now().add(const Duration(hours: 2));
+    }
+
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: isRandomMatch ? Colors.red.shade800 : const Color(0xFF1E3A8A),
+        content: Text(
+          isRandomMatch
+              ? '대화방에서 퇴장했습니다. (향후 2시간 동안 모집글 작성 및 참여가 제한됩니다)'
+              : '대화방에서 퇴장했습니다.',
+        ),
+      ),
+    );
+  }
+
+  void _requestOneMoreMember() {
+    setState(() {
+      widget.post.currentMembers = 4;
+      const newMemberName = '익명의 라이더 D';
+      if (!widget.post.participantNames.contains(newMemberName)) {
+        widget.post.participantNames.add(newMemberName);
+      }
+      final refillMsg = ChatMessage(
+        sender: '시스템',
+        text: '🎉 [충원 완료] 새로운 슬로프 메이트($newMemberName)님이 합류하셨습니다!\n다시 4인 번개가 완성되었습니다 ⛷️🏂',
+        time: DateTime.now(),
+        isSystem: true,
+      );
+      widget.post.chatMessages.add(refillMsg);
+      if (widget.post.id.isNotEmpty) {
+        AppFirebaseService.instance.sendChatMessage(widget.post.id, refillMsg);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: Color(0xFF16A34A),
+        content: Text('⚡ 새로운 메이트가 즉시 충원되어 4인이 완성되었습니다!'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isRandomMatch = widget.post.purpose.contains('랜덤');
+    final bool needsRefill = isRandomMatch && widget.post.currentMembers < 4;
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -7869,10 +8073,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               if (val == 'block') {
                 _showBlockParticipantModal();
               } else if (val == 'leave') {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('대화방에서 퇴장했습니다.')),
-                );
+                _confirmLeaveChatRoom();
               }
             },
             itemBuilder: (context) => [
@@ -7902,23 +8103,67 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-            child: Row(
-              children: [
-                const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF2563EB)),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '참가 승인된 인원만 입장 가능한 대화방입니다. 만남 위치나 복장을 안전하게 조율하세요!',
-                    style: TextStyle(fontSize: 11.5, color: Colors.blue.shade900),
+          if (needsRefill)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                border: Border(bottom: BorderSide(color: Colors.amber.shade200)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.group_outlined, size: 18, color: Color(0xFFD97706)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '참여자 1명이 퇴장했습니다 (현재 ${widget.post.currentMembers}명)',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                        ),
+                        const Text(
+                          '3명이서 타거나, 1명을 즉시 충원할 수 있습니다.',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _requestOneMoreMember,
+                    icon: const Icon(Icons.bolt_rounded, size: 14),
+                    label: const Text('1명 즉시 충원', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '참가 승인된 인원만 입장 가능한 대화방입니다. 만남 위치나 복장을 안전하게 조율하세요!',
+                      style: TextStyle(fontSize: 11.5, color: Colors.blue.shade900),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: StreamBuilder<List<ChatMessage>>(
               stream: widget.post.id.isNotEmpty
@@ -8143,6 +8388,17 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
   }
 
   void _submit() {
+    if (gPostBanUntil != null && DateTime.now().isBefore(gPostBanUntil!)) {
+      final remainingMin = gPostBanUntil!.difference(DateTime.now()).inMinutes;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade800,
+          content: Text('🚨 랜덤 매칭 중도 퇴장 페널티로 인해 앞으로 ${remainingMin + 1}분 동안 모집글 작성이 제한됩니다.'),
+        ),
+      );
+      return;
+    }
+
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
