@@ -5555,7 +5555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 setDialogState(() {
                                   isDuplicateChecked = true;
                                   isAvailable = false;
-                                  statusMessage = '⚠️ 2글자 이상 입력해주세요.';
+                                  statusMessage = '2글자 이상 입력해주세요.';
                                   statusColor = Colors.red.shade700;
                                 });
                                 return;
@@ -5565,7 +5565,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 setDialogState(() {
                                   isDuplicateChecked = true;
                                   isAvailable = true;
-                                  statusMessage = '✅ 현재 사용 중인 나의 닉네임입니다.';
+                                  statusMessage = '현재 사용 중인 닉네임입니다.';
                                   statusColor = Colors.green.shade700;
                                 });
                                 return;
@@ -5575,14 +5575,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 setDialogState(() {
                                   isDuplicateChecked = true;
                                   isAvailable = false;
-                                  statusMessage = '❌ 이미 사용 중인 닉네임입니다.';
+                                  statusMessage = '이미 사용 중인 닉네임입니다.';
                                   statusColor = Colors.red.shade700;
                                 });
                               } else {
                                 setDialogState(() {
                                   isDuplicateChecked = true;
                                   isAvailable = true;
-                                  statusMessage = '✅ 사용 가능한 멋진 닉네임입니다!';
+                                  statusMessage = '사용 가능한 닉네임입니다.';
                                   statusColor = Colors.green.shade700;
                                 });
                               }
