@@ -598,16 +598,31 @@ class UserProfile {
     }
   }
 
-  bool isUserBlocked(String nickname) => blockedUsers.contains(nickname);
+  bool isUserBlocked(String nickname) {
+    if (nickname.isEmpty) return false;
+    final cleanInput = nickname.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+    return blockedUsers.any((blocked) {
+      final cleanBlocked = blocked.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+      return cleanBlocked == cleanInput || blocked.toLowerCase() == nickname.toLowerCase();
+    });
+  }
 
   void blockUser(String nickname) {
+    final clean = nickname.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
     if (!blockedUsers.contains(nickname)) {
       blockedUsers.add(nickname);
+    }
+    if (clean.isNotEmpty && !blockedUsers.contains(clean)) {
+      blockedUsers.add(clean);
     }
   }
 
   void unblockUser(String nickname) {
-    blockedUsers.remove(nickname);
+    final clean = nickname.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+    blockedUsers.removeWhere((b) {
+      final cleanB = b.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+      return b == nickname || cleanB == clean || b.toLowerCase() == nickname.toLowerCase();
+    });
   }
 }
 
@@ -1473,7 +1488,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final recentPosts = gRidePosts.take(4).toList();
+    final recentPosts = gRidePosts.where((post) {
+      if (post.shouldHide) return false;
+      if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
+        return false;
+      }
+      return true;
+    }).take(4).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -2192,6 +2213,46 @@ class _RidePostListViewState extends State<RidePostListView> {
   List<RidePost> get _myJoinedPosts =>
       gRidePosts.where((p) => p.canAccessChat).toList();
 
+  void _showBlockUserDialog(String nickname) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('사용자 차단', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('\'$nickname\' 님을 차단하시겠습니까?\n\n차단 시 해당 사용자가 작성한 모든 모집글과 후기가 목록에서 즉시 숨김 처리됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                if (gCurrentUser != null) {
+                  gCurrentUser!.blockUser(nickname);
+                  AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
+                }
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  content: Text('\'$nickname\' 님을 차단했습니다. 목록에서 즉시 숨김 처리되었습니다.'),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('차단하기'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openMyChatRoomsModal() {
     final joined = _myJoinedPosts;
     if (joined.isEmpty) {
@@ -2448,6 +2509,82 @@ class _RidePostListViewState extends State<RidePostListView> {
                       ],
                     ),
                   ),
+                  if (!post.isAuthor) ...[
+                    const SizedBox(width: 2),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'block',
+                          child: Row(
+                            children: [
+                              Icon(Icons.block_rounded, size: 16, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('작성자 차단하기', style: TextStyle(fontSize: 13, color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'report',
+                          child: Row(
+                            children: [
+                              Icon(Icons.flag_outlined, size: 16, color: Colors.black87),
+                              SizedBox(width: 8),
+                              Text('모집글 신고하기', style: TextStyle(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onSelected: (val) {
+                        if (val == 'block') {
+                          _showBlockUserDialog(post.authorName);
+                        } else if (val == 'report') {
+                          final currentUserId = gCurrentUser?.id ?? 'me';
+                          if (post.reportedUserIds.contains(currentUserId)) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('이미 신고하신 모집글입니다.')),
+                            );
+                            return;
+                          }
+                          showReportContentDialog(
+                            context: context,
+                            targetType: '모집글',
+                            targetAuthor: post.authorName,
+                            currentReportCount: post.reportCount,
+                            onReportSuccess: (reason) {
+                              setState(() {
+                                post.reportCount += 1;
+                                post.reportedUserIds.add(currentUserId);
+                                if (post.reportCount >= 3) {
+                                  post.isBlinded = true;
+                                }
+                              });
+                              if (post.id.isNotEmpty) {
+                                AppFirebaseService.instance.reportRidePost(post.id, currentUserId);
+                              }
+                              if (post.isBlinded) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Color(0xFFDC2626),
+                                    content: Text('🚨 누적 신고 3회로 해당 모집글이 실시간 자동 블라인드(숨김) 처리되었습니다.'),
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: const Color(0xFF1E3A8A),
+                                    content: Text('🚨 신고가 접수되었습니다. (누적: ${post.reportCount}/3회)'),
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 10),
@@ -6831,7 +6968,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         id: 'user_pyeongchang_1',
         provider: SocialAuthProvider.kakao,
         email: 'pyeongchang@kakao.com',
-        nickname: '평창눈사람 (방장)',
+        nickname: '평창눈사람',
         preferredDiscipline: '스키',
         homeResort: '모나용평',
         level: '중급',
@@ -6842,7 +6979,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         id: 'user_gonjiam_2',
         provider: SocialAuthProvider.apple,
         email: 'gonjiam@apple.com',
-        nickname: '곤지암라이더 (상급자)',
+        nickname: '곤지암라이더',
         preferredDiscipline: '스노보드',
         homeResort: '곤지암리조트',
         level: '상급',
@@ -6853,7 +6990,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         id: 'user_vivaldi_3',
         provider: SocialAuthProvider.naver,
         email: 'vivaldi@naver.com',
-        nickname: '비발디보더 (참가자)',
+        nickname: '비발디보더',
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
