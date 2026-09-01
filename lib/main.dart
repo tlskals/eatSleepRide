@@ -15,6 +15,12 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    // 🚀 파이어베이스 익명 인증 및 유저 프로필 초기화 + 데이터 시딩
+    AppFirebaseService.instance.initUserAuthAndProfile().then((_) {
+      AppFirebaseService.instance.seedInitialDataIfEmpty(gRidePosts, gRideReviews);
+    });
+    // 🔔 푸시 알림 및 로컬 알림 서비스 초기화 (권한 요청 및 토큰 등록)
+    NotificationService.instance.initialize();
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
@@ -35,81 +41,7 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFF2563EB),
         ),
       ),
-      home: const SplashScreen(),
-    );
-  }
-}
-
-// -------------------------------------------------------------
-// 🏂 대형 브랜드 스플래시 화면 (선명한 로고 & 문구)
-// -------------------------------------------------------------
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _fadeAnimation = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
-    _animController.forward();
-
-    // 🚀 파이어베이스 익명 인증 및 유저 프로필 초기화 + 데이터 시딩
-    AppFirebaseService.instance.initUserAuthAndProfile().then((_) {
-      AppFirebaseService.instance.seedInitialDataIfEmpty(gRidePosts, gRideReviews);
-    });
-
-    // 🔔 푸시 알림 및 로컬 알림 서비스 초기화 (권한 요청 및 토큰 등록)
-    NotificationService.instance.initialize();
-
-    // 사용자가 로고와 안내 문구를 여유 있게 인지할 수 있도록 1.8초 동안 유지
-    Timer(const Duration(milliseconds: 1800), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const MainScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 400),
-          ),
-        );
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Image.asset(
-            'assets/logos/splash_complete_large.png',
-            width: 360,
-            height: 360,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
+      home: const MainScreen(),
     );
   }
 }
