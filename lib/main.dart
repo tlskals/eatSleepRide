@@ -416,6 +416,8 @@ class RidePost {
   bool isAuthor;
   final List<ChatMessage> chatMessages;
   int unreadCount; // 💬 읽지 않은 신규 메시지 수
+  DateTime createdAt;
+  DateTime? bumpedAt;
 
   // 🚨 실시간 신고 및 3회 누적 자동 블라인드
   int reportCount;
@@ -442,15 +444,31 @@ class RidePost {
     this.isAuthor = false,
     required this.chatMessages,
     this.unreadCount = 0,
+    DateTime? createdAt,
+    this.bumpedAt,
     this.reportCount = 0,
     this.isBlinded = false,
     List<String>? reportedUserIds,
-  })  : participantNames = participantNames ?? [authorName],
+  })  : createdAt = createdAt ?? DateTime.now(),
+        participantNames = participantNames ?? [authorName],
         reportedUserIds = reportedUserIds ?? [];
 
+  DateTime get expiresAt {
+    final base = createdAt;
+    if (base.hour < 2) {
+      // 00:00 ~ 01:59에 작성된 경우 -> 당일 02:00 만료
+      return DateTime(base.year, base.month, base.day, 2, 0, 0);
+    } else {
+      // 02:00 이후 작성된 경우 -> 익일 02:00 만료
+      final nextDay = base.add(const Duration(days: 1));
+      return DateTime(nextDay.year, nextDay.month, nextDay.day, 2, 0, 0);
+    }
+  }
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
   bool get isFull => currentMembers >= (maxMembers + 1);
   bool get canAccessChat => isAuthor || isJoined;
-  bool get shouldHide => isBlinded || reportCount >= 3;
+  bool get shouldHide => isBlinded || reportCount >= 3 || isExpired;
 }
 
 // -------------------------------------------------------------
@@ -655,6 +673,151 @@ UserProfile? gCurrentUser = UserProfile(
 int gDailyRandomMatchLimit = 1;
 int gDailyRandomMatchRemaining = 1;
 DateTime? gPostBanUntil; // 🚨 랜덤 매칭 중도 퇴장 탈주 시 2시간 작성/참여 페널티 만료 시간
+bool gBypassWritingHoursForQA = false; // 🛠️ QA 샌드박스용 시간제한 우회
+
+// ⏰ 모집글 작성 가능 시간 (07:00 ~ 익일 02:00) 체크
+bool isWritingHoursAllowed() {
+  if (gBypassWritingHoursForQA) return true;
+  final now = DateTime.now();
+  // 새벽 02:00 ~ 06:59:59 (새벽 2시~7시)에는 작성 제한
+  if (now.hour >= 2 && now.hour < 7) {
+    return false;
+  }
+  return true;
+}
+
+// 🔒 현재 로그인 사용자의 진행 중인 활성 모집글 조회 (1인 1글 제한)
+RidePost? getMyActivePost() {
+  final myNick = gCurrentUser?.nickname ?? '';
+  if (myNick.isEmpty) return null;
+  return gRidePosts.cast<RidePost?>().firstWhere(
+    (p) => p != null && p.authorName == myNick && !p.isExpired && !p.purpose.contains('랜덤'),
+    orElse: () => null,
+  );
+}
+
+// ✍️ 안전한 모집글 작성 화면 오픈 핸들러 (새벽시간 제한 / 1인 1글 제한 / 탈주 페널티 전방위 검증)
+Future<void> tryOpenWriteRidePostScreen(BuildContext context, {VoidCallback? onPostCreated}) async {
+  // 1. 새벽 글작성 제한 시간대 검사 (02:00 ~ 07:00)
+  if (!isWritingHoursAllowed()) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.nightlight_round, color: Color(0xFF6366F1), size: 22),
+            SizedBox(width: 8),
+            Text('새벽 슬로프 정비 시간', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: const Text(
+          '새벽 02:00 ~ 오전 07:00에는 슬로프 정비 및 안전을 위해 신규 같이타요 모집글 작성이 제한됩니다.\n\n오전 7시부터 작성하실 수 있습니다. ⛷️',
+          style: TextStyle(fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  // 2. 1인 1 활성 모집글 제한 검사
+  final activePost = getMyActivePost();
+  if (activePost != null) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: Color(0xFF2563EB), size: 22),
+            SizedBox(width: 8),
+            Text('진행 중인 모집글 안내', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Text(
+          '\'${activePost.title}\' 모집글이 현재 진행 중입니다.\n\n같이타요는 원활한 매칭을 위해 한 번에 1개의 모집글만 등록할 수 있습니다. 기존 글이 명일 02시에 자동 만료된 후 새 글을 작성하실 수 있습니다.',
+          style: const TextStyle(fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('닫기', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => RidePostDetailScreen(post: activePost)),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('내 모집글 보기'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  // 3. 탈주 페널티 검사
+  if (gPostBanUntil != null && DateTime.now().isBefore(gPostBanUntil!)) {
+    final remaining = gPostBanUntil!.difference(DateTime.now());
+    final minutes = remaining.inMinutes + 1;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 22),
+            SizedBox(width: 8),
+            Text('모집글 작성 제한', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Text(
+          '최근 4인 랜덤 매칭 대화방에서 퇴장하여 $minutes분 동안 새 모집글 작성이 제한됩니다.',
+          style: const TextStyle(fontSize: 13.5, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const WriteRidePostScreen()),
+  );
+  if (result == true) {
+    onPostCreated?.call();
+  }
+}
 
 // -------------------------------------------------------------
 // 같이 탔어요 (후기 & 설질 피드) 데이터 모델
@@ -1508,7 +1671,15 @@ class _HomeScreenState extends State<HomeScreen> {
         return false;
       }
       return true;
-    }).take(4).toList();
+    }).toList();
+
+    recentPosts.sort((a, b) {
+      final aTime = a.bumpedAt ?? a.createdAt;
+      final bTime = b.bumpedAt ?? b.createdAt;
+      return bTime.compareTo(aTime);
+    });
+
+    final displayedRecentPosts = recentPosts.take(4).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -1577,7 +1748,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // -------------------------------------------------------
               // 2. 🏂 실시간 같이 타요 최신 등록 항목들
               // -------------------------------------------------------
-              _buildRecentPostsSection(recentPosts),
+              _buildRecentPostsSection(displayedRecentPosts),
 
               const SizedBox(height: 26),
 
@@ -2033,10 +2204,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const WriteRidePostScreen()),
-              ).then((_) {
+              tryOpenWriteRidePostScreen(context, onPostCreated: () {
                 if (mounted) setState(() {});
               });
             },
@@ -2350,62 +2518,73 @@ class _RidePostListViewState extends State<RidePostListView> {
       return true;
     }).toList();
 
+    visiblePosts.sort((a, b) {
+      final aTime = a.bumpedAt ?? a.createdAt;
+      final bTime = b.bumpedAt ?? b.createdAt;
+      return bTime.compareTo(aTime);
+    });
+
     final joinedPosts = _myJoinedPosts;
     final totalUnreadCount = joinedPosts.fold<int>(0, (sum, p) => sum + p.unreadCount);
 
     return Scaffold(
-      body: visiblePosts.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {});
+          await Future.delayed(const Duration(milliseconds: 300));
+        },
+        child: visiblePosts.isEmpty
+            ? SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.snowboarding_rounded, size: 52, color: Color(0xFF2563EB)),
                       ),
-                      child: const Icon(Icons.snowboarding_rounded, size: 52, color: Color(0xFF2563EB)),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('등록된 같이타요 모집글이 없습니다', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87)),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '내가 원하는 스키장과 시간대를 정해\n첫 번째 슬로프 메이트 모집글을 올려보세요!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const WriteRidePostScreen()),
-                        ).then((_) => setState(() {}));
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      const SizedBox(height: 16),
+                      const Text('등록된 같이타요 모집글이 없습니다', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      const SizedBox(height: 8),
+                      const Text(
+                        '내가 원하는 스키장과 시간대를 정해\n첫 번째 슬로프 메이트 모집글을 올려보세요!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
                       ),
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('첫 메이트 모집글 작성하기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () => tryOpenWriteRidePostScreen(context, onPostCreated: () => setState(() {})),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('첫 메이트 모집글 작성하기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
                 ),
+              )
+            : ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                itemCount: visiblePosts.length,
+                itemBuilder: (context, index) {
+                  final post = visiblePosts[index];
+                  return _buildPostCard(post);
+                },
               ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              itemCount: visiblePosts.length,
-              itemBuilder: (context, index) {
-                final post = visiblePosts[index];
-                return _buildPostCard(post);
-              },
-            ),
+      ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -2443,15 +2622,7 @@ class _RidePostListViewState extends State<RidePostListView> {
             heroTag: 'floating_write_button_hub',
             backgroundColor: const Color(0xFF2563EB),
             foregroundColor: Colors.white,
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const WriteRidePostScreen()),
-              );
-              if (result == true) {
-                setState(() {});
-              }
-            },
+            onPressed: () => tryOpenWriteRidePostScreen(context, onPostCreated: () => setState(() {})),
             icon: const Icon(Icons.edit),
             label: const Text('글쓰기', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
@@ -2660,7 +2831,49 @@ class _RidePostListViewState extends State<RidePostListView> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  if (post.bumpedAt != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: const Text('⚡ 끌올', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  if (post.isAuthor && !post.isExpired) ...[
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          post.bumpedAt = DateTime.now();
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: Color(0xFF1E3A8A),
+                            content: Text('⚡ 모집글을 목록 맨 위로 끌어올렸습니다!'),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF2563EB)),
+                            SizedBox(width: 2),
+                            Text('끌어올리기', style: TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   const Text('상세보기 >', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -6943,6 +7156,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: const Icon(Icons.bolt_rounded, size: 16),
               label: const Text('⚡ 페널티 해제 & 오늘 매칭 기회 1회 충전', style: TextStyle(fontSize: 11.5)),
             ),
+          ),
+          const Divider(height: 1, color: Color(0xFF334155)),
+          const SizedBox(height: 4),
+
+          // 도구 4: 새벽 글작성 제한 시간(02~07시) 우회 토글
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.nightlight_round, color: Color(0xFF818CF8), size: 18),
+            title: const Text('새벽 글작성 시간제한 우회 (QA)', style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
+            subtitle: Text(
+              gBypassWritingHoursForQA ? '현재 24시간 언제든 글쓰기 가능' : '새벽 02:00~07:00 작성 제한 정상 작동 중',
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5),
+            ),
+            value: gBypassWritingHoursForQA,
+            activeThumbColor: const Color(0xFF38BDF8),
+            onChanged: (val) {
+              setState(() {
+                gBypassWritingHoursForQA = val;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  content: Text(val ? '⏰ 새벽 글작성 시간제한이 우회되었습니다.' : '⏰ 새벽 글작성 시간제한이 정상 적용되었습니다.'),
+                ),
+              );
+            },
           ),
         ],
       ),
