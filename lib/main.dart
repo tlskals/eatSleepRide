@@ -7484,13 +7484,6 @@ class RidePostDetailScreen extends StatefulWidget {
 }
 
 class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
-  String _formatTimeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return '방금 전';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
-    return '${diff.inHours}시간 전';
-  }
-
   void _handleBumpPost() {
     final post = widget.post;
     if (!post.isAuthor || post.isExpired) return;
@@ -7498,18 +7491,18 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
     final now = DateTime.now();
     if (post.bumpedAt != null) {
       final diffInSeconds = now.difference(post.bumpedAt!).inSeconds;
-      const cooldownSeconds = 5 * 60; // 5분 = 300초
-      if (diffInSeconds < cooldownSeconds) {
-        final remainingSec = cooldownSeconds - diffInSeconds;
+      const intervalSeconds = 5 * 60; // 5분 = 300초
+      if (diffInSeconds < intervalSeconds) {
+        final remainingSec = intervalSeconds - diffInSeconds;
         final remainingMin = (remainingSec / 60).ceil();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF1E293B),
             content: Row(
               children: [
-                const Icon(Icons.timer_outlined, color: Colors.amber, size: 20),
+                const Icon(Icons.access_time_rounded, color: Colors.amber, size: 20),
                 const SizedBox(width: 8),
-                Text('⏳ 끌어올리기 쿨타임이 $remainingMin분 남았습니다. (5분 주기)'),
+                Text('게시글 끌어올리기는 5분 간격으로 가능합니다. (약 $remainingMin분 후 가능)'),
               ],
             ),
           ),
@@ -7533,7 +7526,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
           children: [
             Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
             SizedBox(width: 8),
-            Text('⚡ 모집글을 목록 최상단으로 끌어올렸습니다! (5분 쿨타임)'),
+            Text('⚡ 게시글을 목록 최상단으로 끌어올렸습니다.'),
           ],
         ),
       ),
@@ -7863,62 +7856,6 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            if (post.isAuthor && !post.isExpired) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.bolt_rounded, color: Color(0xFF2563EB), size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '내 모집글 상단 끌어올리기',
-                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            post.bumpedAt != null
-                                ? '최근 끌올: ${_formatTimeAgo(post.bumpedAt!)} (5분 쿨타임)'
-                                : '목록 최상단으로 글을 재배치합니다. (5분 쿨타임)',
-                            style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _handleBumpPost,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        elevation: 0,
-                      ),
-                      icon: const Icon(Icons.bolt_rounded, size: 16),
-                      label: const Text('끌어올리기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
