@@ -421,6 +421,18 @@ class AppFirebaseService {
     }
   }
 
+  Future<void> bumpRidePost(String postId, DateTime bumpedAt) async {
+    try {
+      final docRef = _firestore.collection('gatherings').doc(postId);
+      await docRef.update({
+        'bumpedAt': Timestamp.fromDate(bumpedAt),
+      });
+    } catch (e) {
+      debugPrint('Firebase bumpRidePost error: $e');
+      rethrow;
+    }
+  }
+
   // -------------------------------------------------------------
   // 3. 실시간 채팅 (`gatherings/{postId}/messages` 서브컬렉션)
   // -------------------------------------------------------------
