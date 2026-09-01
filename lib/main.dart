@@ -2462,7 +2462,14 @@ class _RidePostListViewState extends State<RidePostListView> {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
-          setState(() {});
+          final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
+          if (refreshed.isNotEmpty) {
+            setState(() {
+              gRidePosts = refreshed;
+            });
+          } else {
+            setState(() {});
+          }
           await Future.delayed(const Duration(milliseconds: 300));
         },
         child: visiblePosts.isEmpty
@@ -7514,6 +7521,12 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
     setState(() {
       post.bumpedAt = now;
     });
+
+    // 전역 리스트 gRidePosts 및 메모리 동기화
+    final idx = gRidePosts.indexWhere((p) => (p.id.isNotEmpty && p.id == post.id) || (p.title == post.title && p.authorName == post.authorName));
+    if (idx != -1) {
+      gRidePosts[idx].bumpedAt = now;
+    }
 
     if (post.id.isNotEmpty) {
       AppFirebaseService.instance.bumpRidePost(post.id, now);

@@ -272,7 +272,6 @@ class AppFirebaseService {
   Stream<List<RidePost>> streamRidePosts() {
     return _firestore
         .collection('gatherings')
-        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -282,6 +281,15 @@ class AppFirebaseService {
         final author = data['authorName'] ?? '익명';
         final isAuthor = author == currentUserName;
         final isJoined = participants.contains(currentUserName) || isAuthor;
+
+        DateTime? createdAt;
+        if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+          createdAt = (data['createdAt'] as Timestamp).toDate();
+        }
+        DateTime? bumpedAt;
+        if (data['bumpedAt'] != null && data['bumpedAt'] is Timestamp) {
+          bumpedAt = (data['bumpedAt'] as Timestamp).toDate();
+        }
 
         return RidePost(
           id: doc.id,
@@ -305,9 +313,63 @@ class AppFirebaseService {
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
           reportedUserIds: List<String>.from(data['reportedUserIds'] ?? []),
+          createdAt: createdAt,
+          bumpedAt: bumpedAt,
         );
       }).toList();
     });
+  }
+
+  Future<List<RidePost>> getRidePostsOnce() async {
+    try {
+      final snapshot = await _firestore.collection('gatherings').get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        final currentUserName = gCurrentUser?.nickname ?? '';
+        final participants = List<String>.from(data['participantNames'] ?? []);
+        final author = data['authorName'] ?? '익명';
+        final isAuthor = author == currentUserName;
+        final isJoined = participants.contains(currentUserName) || isAuthor;
+
+        DateTime? createdAt;
+        if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+          createdAt = (data['createdAt'] as Timestamp).toDate();
+        }
+        DateTime? bumpedAt;
+        if (data['bumpedAt'] != null && data['bumpedAt'] is Timestamp) {
+          bumpedAt = (data['bumpedAt'] as Timestamp).toDate();
+        }
+
+        return RidePost(
+          id: doc.id,
+          title: data['title'] ?? '',
+          content: data['content'] ?? '',
+          resortName: data['resortName'] ?? '',
+          slopes: List<String>.from(data['slopes'] ?? []),
+          discipline: data['discipline'] ?? '보드',
+          style: data['style'] ?? '라이딩',
+          skillLevel: data['skillLevel'] ?? '초급',
+          purpose: data['purpose'] ?? '동행/원정',
+          dateText: data['dateText'] ?? '오늘',
+          timeSlot: data['timeSlot'] ?? '주간',
+          maxMembers: data['maxMembers'] ?? 3,
+          currentMembers: data['currentMembers'] ?? (participants.length),
+          authorName: author,
+          participantNames: participants,
+          isJoined: isJoined,
+          isAuthor: isAuthor,
+          chatMessages: [],
+          reportCount: data['reportCount'] ?? 0,
+          isBlinded: data['isBlinded'] ?? false,
+          reportedUserIds: List<String>.from(data['reportedUserIds'] ?? []),
+          createdAt: createdAt,
+          bumpedAt: bumpedAt,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Firebase getRidePostsOnce error: $e');
+      return [];
+    }
   }
 
   Future<void> createRidePost(RidePost post) async {
@@ -330,7 +392,8 @@ class AppFirebaseService {
         'reportCount': 0,
         'isBlinded': false,
         'reportedUserIds': [],
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': Timestamp.fromDate(post.createdAt),
+        'bumpedAt': post.bumpedAt != null ? Timestamp.fromDate(post.bumpedAt!) : null,
       });
 
       // 개설 안내 시스템 메시지 추가
