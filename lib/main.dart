@@ -399,7 +399,7 @@ class RidePost {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
   bool get isFull => currentMembers >= (maxMembers + 1);
-  bool get canAccessChat => isAuthor || isJoined;
+  bool get canAccessChat => (isAuthor || isJoined) && !isExpired && !isBlinded;
   bool get shouldHide => isBlinded || reportCount >= 3 || isExpired;
 }
 
@@ -7910,58 +7910,79 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
           border: Border(top: BorderSide(color: Colors.grey.shade200)),
         ),
         child: SafeArea(
-          child: canEnterChat
-              ? Row(
-                  children: [
-                    if (post.isAuthor && !post.isExpired) ...[
-                      Expanded(
-                        flex: 4,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF2563EB),
-                            side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: _handleBumpPost,
-                          icon: const Icon(Icons.bolt_rounded, size: 18),
-                          label: const Text('끌어올리기', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold)),
-                        ),
+          child: post.isExpired
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.lock_clock_outlined, size: 16, color: Colors.grey),
+                      SizedBox(width: 6),
+                      Text(
+                        '모집 일정이 만료되어 대화방이 자동 종료되었습니다',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
                       ),
-                      const SizedBox(width: 8),
                     ],
-                    Expanded(
-                      flex: 6,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                )
+              : canEnterChat
+                  ? Row(
+                      children: [
+                        if (post.isAuthor && !post.isExpired) ...[
+                          Expanded(
+                            flex: 4,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF2563EB),
+                                side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: _handleBumpPost,
+                              icon: const Icon(Icons.bolt_rounded, size: 18),
+                              label: const Text('끌어올리기', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          flex: 6,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => ChatRoomScreen(post: post)),
+                              ).then((_) => setState(() {}));
+                            },
+                            icon: const Icon(Icons.mark_chat_unread_rounded),
+                            label: const Text('대화방 열기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          ),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => ChatRoomScreen(post: post)),
-                          ).then((_) => setState(() {}));
-                        },
-                        icon: const Icon(Icons.mark_chat_unread_rounded),
-                        label: const Text('대화방 열기', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      ],
+                    )
+                  : FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: post.isFull ? Colors.grey : const Color(0xFF2563EB),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: post.isFull ? null : _joinRide,
+                      child: Text(
+                        post.isFull ? '모집이 마감되었습니다' : '같이 타기 참가하기 (${post.currentMembers}/${post.maxMembers + 1}명)',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
-                  ],
-                )
-              : FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: post.isFull ? Colors.grey : const Color(0xFF2563EB),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: post.isFull ? null : _joinRide,
-                  child: Text(
-                    post.isFull ? '모집이 마감되었습니다' : '같이 타기 참가하기 (${post.currentMembers}/${post.maxMembers + 1}명)',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ),
         ),
       ),
     );
@@ -8013,6 +8034,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _sendMessage() {
+    if (widget.post.isExpired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('종료된 대화방에서는 메시지를 전송할 수 없습니다.')),
+      );
+      return;
+    }
     final text = _msgController.text.trim();
     if (text.isEmpty) return;
 
@@ -8390,7 +8417,25 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
       body: Column(
         children: [
-          if (needsRefill)
+          if (widget.post.isExpired)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: Colors.grey.shade200,
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_clock_outlined, size: 16, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '🌙 모집 일정이 만료(익일 02:00)되어 대화방이 자동 종료되었습니다.',
+                      style: TextStyle(fontSize: 11.5, color: Colors.black87, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (needsRefill)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -8519,39 +8564,55 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               },
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade200)),
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _msgController,
-                      onSubmitted: (_) => _sendMessage(),
-                      decoration: InputDecoration(
-                        hintText: '메시지를 입력하세요 (예: 검정 자켓/흰 헬멧입니다)',
-                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+          widget.post.isExpired
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    border: Border(top: BorderSide(color: Colors.grey.shade300)),
+                  ),
+                  child: const SafeArea(
+                    child: Center(
+                      child: Text(
+                        '🔒 종료된 대화방에서는 새 메시지를 전송할 수 없습니다.',
+                        style: TextStyle(fontSize: 12.5, color: Colors.grey, fontWeight: FontWeight.w500),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    style: IconButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
-                    icon: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
-                    onPressed: _sendMessage,
+                )
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
                   ),
-                ],
-              ),
-            ),
-          ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _msgController,
+                            onSubmitted: (_) => _sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: '메시지를 입력하세요 (예: 검정 자켓/흰 헬멧입니다)',
+                              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              filled: true,
+                              fillColor: Colors.grey.shade100,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          style: IconButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
+                          icon: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+                          onPressed: _sendMessage,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
         ],
       ),
     );
