@@ -568,6 +568,13 @@ class UserProfile {
         ],
         blockedUsers = blockedUsers ?? [];
 
+  String get disciplineAvatarAsset {
+    if (preferredDiscipline.contains('보드')) {
+      return 'assets/logos/penguin_board.png';
+    }
+    return 'assets/logos/penguin_ski.png';
+  }
+
   String get providerDisplayName {
     switch (provider) {
       case SocialAuthProvider.kakao:
@@ -1512,12 +1519,17 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.downhill_skiing_rounded, color: Color(0xFF2563EB), size: 20),
+              child: Image.asset(
+                'assets/logos/penguin_board.png',
+                width: 24,
+                height: 24,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(width: 8),
             const Text(
@@ -2093,19 +2105,95 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('같이 타요', style: TextStyle(fontWeight: FontWeight.bold)),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: const Color(0xFF2563EB),
-          unselectedLabelColor: Colors.grey.shade600,
-          indicatorColor: const Color(0xFF2563EB),
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5),
-          tabs: const [
-            Tab(text: '같이 타요'),
-            Tab(text: '랜덤 매칭'),
-            Tab(text: '같이 탔어요'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Image.asset(
+                'assets/logos/penguin_board.png',
+                width: 24,
+                height: 24,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '같이타요',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+                letterSpacing: -0.5,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                '동행 허브',
+                style: TextStyle(fontSize: 10.5, color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
           ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: const Color(0xFF2563EB),
+              unselectedLabelColor: Colors.grey.shade600,
+              indicatorColor: const Color(0xFF2563EB),
+              indicatorWeight: 3,
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              tabs: const [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.group_rounded, size: 16),
+                      SizedBox(width: 5),
+                      Text('같이 타요'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bolt_rounded, size: 16),
+                      SizedBox(width: 5),
+                      Text('랜덤 매칭'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.photo_library_rounded, size: 16),
+                      SizedBox(width: 5),
+                      Text('같이 탔어요'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
       body: TabBarView(
@@ -3557,8 +3645,16 @@ class _RideReviewListViewState extends State<RideReviewListView> {
               children: [
                 CircleAvatar(
                   radius: 17,
-                  backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                  child: const Icon(Icons.person_outline_rounded, color: Color(0xFF2563EB), size: 18),
+                  backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2.0),
+                    child: Image.asset(
+                      (review.tags.any((t) => t.contains('보드')) || review.content.contains('보드'))
+                          ? 'assets/logos/penguin_board.png'
+                          : 'assets/logos/penguin_ski.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -6342,19 +6438,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
-              // 프로필 아바타 + OAuth 뱃지
+              // 프로필 아바타 (주종목에 따라 스키/보드 펭귄 자동 반영) + OAuth 뱃지
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
                   CircleAvatar(
-                    radius: 28,
-                    backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                    child: Icon(
-                      user.preferredDiscipline == '스노보드'
-                          ? Icons.snowboarding_rounded
-                          : Icons.downhill_skiing_rounded,
-                      color: const Color(0xFF2563EB),
-                      size: 28,
+                    radius: 30,
+                    backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Image.asset(
+                        user.disciplineAvatarAsset,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                   Container(
@@ -6938,11 +7034,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ListTile(
                       dense: true,
                       leading: CircleAvatar(
-                        backgroundColor: acc.providerColor,
-                        radius: 14,
-                        child: Text(
-                          acc.provider == SocialAuthProvider.kakao ? 'K' : (acc.provider == SocialAuthProvider.naver ? 'N' : ''),
-                          style: TextStyle(color: acc.providerTextColor, fontSize: 10, fontWeight: FontWeight.bold),
+                        backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                        radius: 16,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2.0),
+                          child: Image.asset(
+                            acc.disciplineAvatarAsset,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       title: Text(acc.nickname, style: TextStyle(fontWeight: FontWeight.bold, color: isCurrent ? const Color(0xFF2563EB) : Colors.black87)),
