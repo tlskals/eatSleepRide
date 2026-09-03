@@ -629,7 +629,11 @@ RidePost? getMyActivePost() {
 }
 
 // ✍️ 안전한 모집글 작성 화면 오픈 핸들러 (새벽시간 제한 / 1인 1글 제한 / 탈주 페널티 전방위 검증)
-Future<void> tryOpenWriteRidePostScreen(BuildContext context, {VoidCallback? onPostCreated}) async {
+Future<void> tryOpenWriteRidePostScreen(
+  BuildContext context, {
+  VoidCallback? onPostCreated,
+  String? initialResortName,
+}) async {
   // 1. 새벽 글작성 제한 시간대 검사 (02:00 ~ 07:00)
   if (!isWritingHoursAllowed()) {
     showDialog(
@@ -744,7 +748,7 @@ Future<void> tryOpenWriteRidePostScreen(BuildContext context, {VoidCallback? onP
 
   final result = await Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => const WriteRidePostScreen()),
+    MaterialPageRoute(builder: (_) => WriteRidePostScreen(initialResortName: initialResortName)),
   );
   if (result == true) {
     onPostCreated?.call();
@@ -2319,6 +2323,49 @@ class RidePostListView extends StatefulWidget {
 }
 
 class _RidePostListViewState extends State<RidePostListView> {
+  String _selectedResort = '전체';
+  String _selectedDiscipline = '전체'; // 전체, 스키, 스노보드
+  String _selectedTimeSlot = '전체'; // 전체, 주간, 야간, 심야
+  bool _onlyRecruiting = false; // 모집 중만 보기 (정원 마감 제외)
+  bool _isSearchOpen = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchKeyword = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool get _hasActiveFilter =>
+      _selectedResort != '전체' ||
+      _selectedDiscipline != '전체' ||
+      _selectedTimeSlot != '전체' ||
+      _onlyRecruiting ||
+      _searchKeyword.isNotEmpty;
+
+  void _resetFilters() {
+    setState(() {
+      _selectedResort = '전체';
+      _selectedDiscipline = '전체';
+      _selectedTimeSlot = '전체';
+      _onlyRecruiting = false;
+      _searchKeyword = '';
+      _searchController.clear();
+      _isSearchOpen = false;
+    });
+  }
+
+  int _getPostCountForResort(String resortShortName) {
+    return gRidePosts.where((post) {
+      if (post.purpose.contains('랜덤')) return false;
+      if (post.shouldHide) return false;
+      if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) return false;
+      if (resortShortName == '전체') return true;
+      return post.resortName.contains(resortShortName);
+    }).length;
+  }
+
   List<RidePost> get _myJoinedPosts =>
       gRidePosts.where((p) => p.canAccessChat).toList();
 
@@ -2439,6 +2486,497 @@ class _RidePostListViewState extends State<RidePostListView> {
     );
   }
 
+  void _showDisciplineFilterDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('종목 선택', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              ListTile(
+                title: const Text('전체 종목 보기'),
+                trailing: _selectedDiscipline == '전체' ? const Icon(Icons.check_rounded, color: Color(0xFF2563EB)) : null,
+                onTap: () {
+                  setState(() => _selectedDiscipline = '전체');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Text('🎿', style: TextStyle(fontSize: 22)),
+                title: const Text('스키 (인터스키, 프리스키)'),
+                trailing: _selectedDiscipline == '스키' ? const Icon(Icons.check_rounded, color: Color(0xFF2563EB)) : null,
+                onTap: () {
+                  setState(() => _selectedDiscipline = '스키');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Text('🏂', style: TextStyle(fontSize: 22)),
+                title: const Text('스노보드 (라이딩, 트릭, 파크)'),
+                trailing: _selectedDiscipline == '스노보드' ? const Icon(Icons.check_rounded, color: Color(0xFF2563EB)) : null,
+                onTap: () {
+                  setState(() => _selectedDiscipline = '스노보드');
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTimeSlotFilterDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('시간대 선택', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              ...['전체', '주간', '야간', '심야'].map((slot) {
+                final isSelected = _selectedTimeSlot == slot;
+                return ListTile(
+                  title: Text(slot == '전체' ? '전체 시간대' : slot),
+                  trailing: isSelected ? const Icon(Icons.check_rounded, color: Color(0xFF2563EB)) : null,
+                  onTap: () {
+                    setState(() => _selectedTimeSlot = slot);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResortChip(String shortName, {bool isHomeBadge = false}) {
+    final isSelected = _selectedResort == shortName;
+    final count = _getPostCountForResort(shortName);
+
+    return FilterChip(
+      selected: isSelected,
+      showCheckmark: false,
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isHomeBadge) ...[
+            const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+            const SizedBox(width: 2),
+          ],
+          Text(
+            isHomeBadge ? '내 베이스 ($shortName)' : shortName,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected ? Colors.white : Colors.black87,
+            ),
+          ),
+          if (count > 0) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white.withValues(alpha: 0.25) : const Color(0xFF2563EB).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : const Color(0xFF2563EB),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      backgroundColor: Colors.grey.shade100,
+      selectedColor: const Color(0xFF2563EB),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade300,
+          width: isSelected ? 1.5 : 1,
+        ),
+      ),
+      onSelected: (_) {
+        setState(() {
+          _selectedResort = shortName;
+        });
+      },
+    );
+  }
+
+  Widget _buildSubFilterChip({
+    required String label,
+    required bool isSelected,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.12) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade300,
+            width: isSelected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade700),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade600),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterHeader() {
+    final homeResort = gCurrentUser?.homeResort.split(' ')[0] ?? '';
+    final hasHomeResort = homeResort.isNotEmpty && kSkiResorts.any((r) => r.shortName == homeResort || r.name.contains(homeResort));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1행: 검색창이 열려있으면 검색 입력 필드 표시
+          if (_isSearchOpen)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 10),
+                    const Icon(Icons.search_rounded, size: 18, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: const InputDecoration(
+                          hintText: '슬로프(5번, 레인보우), 스타일, 닉네임 검색',
+                          hintStyle: TextStyle(fontSize: 12.5, color: Colors.grey),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            _searchKeyword = val.trim();
+                          });
+                        },
+                      ),
+                    ),
+                    if (_searchKeyword.isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 16, color: Colors.grey),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchKeyword = '';
+                          });
+                        },
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_upward_rounded, size: 16, color: Colors.grey),
+                      onPressed: () {
+                        setState(() {
+                          _isSearchOpen = false;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // 2행: 스키장(베이스) 탭바 가로 스크롤
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              children: [
+                _buildResortChip('전체'),
+                if (hasHomeResort) ...[
+                  const SizedBox(width: 6),
+                  _buildResortChip(homeResort, isHomeBadge: true),
+                ],
+                const SizedBox(width: 6),
+                ...kSkiResorts.where((r) => r.shortName != homeResort).map((resort) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _buildResortChip(resort.shortName),
+                  );
+                }),
+              ],
+            ),
+          ),
+
+          // 3행: 2차 빠른 필터 옵션 바 (종목 / 모집상태 / 시간대 / 검색버튼 / 초기화버튼)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  // 종목 필터 (전체 / 🎿 스키 / 🏂 스노보드)
+                  _buildSubFilterChip(
+                    label: _selectedDiscipline == '전체' ? '종목 전체' : _selectedDiscipline == '스키' ? '🎿 스키' : '🏂 스노보드',
+                    isSelected: _selectedDiscipline != '전체',
+                    icon: Icons.snowboarding_rounded,
+                    onTap: _showDisciplineFilterDialog,
+                  ),
+                  const SizedBox(width: 6),
+
+                  // 모집 중만 보기 토글 칩
+                  FilterChip(
+                    selected: _onlyRecruiting,
+                    showCheckmark: false,
+                    avatar: Icon(
+                      _onlyRecruiting ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      size: 14,
+                      color: _onlyRecruiting ? Colors.white : Colors.grey.shade600,
+                    ),
+                    label: const Text('모집 중만', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    labelStyle: TextStyle(
+                      color: _onlyRecruiting ? Colors.white : Colors.grey.shade800,
+                    ),
+                    backgroundColor: Colors.grey.shade100,
+                    selectedColor: const Color(0xFF16A34A),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: _onlyRecruiting ? Colors.transparent : Colors.grey.shade300,
+                      ),
+                    ),
+                    onSelected: (val) {
+                      setState(() {
+                        _onlyRecruiting = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 6),
+
+                  // 시간대 필터 (전체 / 주간 / 야간 / 심야)
+                  _buildSubFilterChip(
+                    label: _selectedTimeSlot == '전체' ? '시간대' : _selectedTimeSlot,
+                    isSelected: _selectedTimeSlot != '전체',
+                    icon: Icons.access_time_rounded,
+                    onTap: _showTimeSlotFilterDialog,
+                  ),
+                  const SizedBox(width: 6),
+
+                  // 검색창 토글 버튼
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isSearchOpen = !_isSearchOpen;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _isSearchOpen || _searchKeyword.isNotEmpty
+                            ? const Color(0xFF2563EB).withValues(alpha: 0.12)
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _isSearchOpen || _searchKeyword.isNotEmpty
+                              ? const Color(0xFF2563EB)
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_rounded,
+                            size: 14,
+                            color: _isSearchOpen || _searchKeyword.isNotEmpty
+                                ? const Color(0xFF2563EB)
+                                : Colors.grey.shade700,
+                          ),
+                          if (_searchKeyword.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '\'$_searchKeyword\'',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 활성 필터 초기화 버튼
+                  if (_hasActiveFilter) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _resetFilters,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.refresh_rounded, size: 13, color: Colors.red),
+                            SizedBox(width: 2),
+                            Text('초기화', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    final hasFilter = _hasActiveFilter;
+    final resortName = _selectedResort;
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.55,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                hasFilter ? Icons.filter_list_off_rounded : Icons.snowboarding_rounded,
+                size: 48,
+                color: const Color(0xFF2563EB),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hasFilter
+                  ? (resortName != '전체' ? '\'$resortName\'에 등록된 모집글이 없습니다' : '선택한 조건의 모집글이 없습니다')
+                  : '등록된 같이타요 모집글이 없습니다',
+              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: Colors.black87),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              hasFilter
+                  ? (resortName != '전체'
+                      ? '내가 먼저 \'$resortName\' 슬로프 메이트를 모집해보세요!'
+                      : '필터를 변경하거나 첫 번째 모집글을 올려보세요!')
+                  : '내가 원하는 스키장과 시간대를 정해\n첫 번째 슬로프 메이트 모집글을 올려보세요!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (hasFilter) ...[
+                  OutlinedButton.icon(
+                    onPressed: _resetFilters,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade800,
+                      side: BorderSide(color: Colors.grey.shade400),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('필터 초기화', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                ElevatedButton.icon(
+                  onPressed: () => tryOpenWriteRidePostScreen(
+                    context,
+                    initialResortName: resortName != '전체' ? resortName : null,
+                    onPostCreated: () => setState(() {}),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(
+                    resortName != '전체' ? '\'$resortName\' 첫 글 작성' : '첫 모집글 작성하기',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visiblePosts = gRidePosts.where((post) {
@@ -2447,6 +2985,45 @@ class _RidePostListViewState extends State<RidePostListView> {
       if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
         return false;
       }
+
+      // 1. 스키장(베이스) 필터
+      if (_selectedResort != '전체') {
+        if (!post.resortName.contains(_selectedResort)) {
+          return false;
+        }
+      }
+
+      // 2. 종목 필터 (스키 / 스노보드)
+      if (_selectedDiscipline != '전체') {
+        if (post.discipline != _selectedDiscipline) {
+          return false;
+        }
+      }
+
+      // 3. 모집 상태 필터 (모집 중만 보기)
+      if (_onlyRecruiting && post.isFull) {
+        return false;
+      }
+
+      // 4. 시간대 필터 (주간, 야간, 심야)
+      if (_selectedTimeSlot != '전체') {
+        if (!post.timeSlot.contains(_selectedTimeSlot)) {
+          return false;
+        }
+      }
+
+      // 5. 검색어 필터 (제목, 슬로프, 본문, 작성자)
+      if (_searchKeyword.isNotEmpty) {
+        final q = _searchKeyword.toLowerCase();
+        final matchTitle = post.title.toLowerCase().contains(q);
+        final matchSlopes = post.slopes.any((s) => s.toLowerCase().contains(q));
+        final matchContent = post.content.toLowerCase().contains(q);
+        final matchAuthor = post.authorName.toLowerCase().contains(q);
+        if (!matchTitle && !matchSlopes && !matchContent && !matchAuthor) {
+          return false;
+        }
+      }
+
       return true;
     }).toList();
 
@@ -2460,69 +3037,36 @@ class _RidePostListViewState extends State<RidePostListView> {
     final totalUnreadCount = joinedPosts.fold<int>(0, (sum, p) => sum + p.unreadCount);
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
-          if (refreshed.isNotEmpty) {
-            setState(() {
-              gRidePosts = refreshed;
-            });
-          } else {
-            setState(() {});
-          }
-          await Future.delayed(const Duration(milliseconds: 300));
-        },
-        child: visiblePosts.isEmpty
-            ? SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Container(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(32.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.snowboarding_rounded, size: 52, color: Color(0xFF2563EB)),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('등록된 같이타요 모집글이 없습니다', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87)),
-                      const SizedBox(height: 8),
-                      const Text(
-                        '내가 원하는 스키장과 시간대를 정해\n첫 번째 슬로프 메이트 모집글을 올려보세요!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        onPressed: () => tryOpenWriteRidePostScreen(context, onPostCreated: () => setState(() {})),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('첫 메이트 모집글 작성하기', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                itemCount: visiblePosts.length,
-                itemBuilder: (context, index) {
-                  final post = visiblePosts[index];
-                  return _buildPostCard(post);
-                },
-              ),
+      body: Column(
+        children: [
+          _buildFilterHeader(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
+                if (refreshed.isNotEmpty) {
+                  setState(() {
+                    gRidePosts = refreshed;
+                  });
+                } else {
+                  setState(() {});
+                }
+                await Future.delayed(const Duration(milliseconds: 300));
+              },
+              child: visiblePosts.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      itemCount: visiblePosts.length,
+                      itemBuilder: (context, index) {
+                        final post = visiblePosts[index];
+                        return _buildPostCard(post);
+                      },
+                    ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2561,7 +3105,11 @@ class _RidePostListViewState extends State<RidePostListView> {
             heroTag: 'floating_write_button_hub',
             backgroundColor: const Color(0xFF2563EB),
             foregroundColor: Colors.white,
-            onPressed: () => tryOpenWriteRidePostScreen(context, onPostCreated: () => setState(() {})),
+            onPressed: () => tryOpenWriteRidePostScreen(
+              context,
+              initialResortName: _selectedResort != '전체' ? _selectedResort : null,
+              onPostCreated: () => setState(() {}),
+            ),
             icon: const Icon(Icons.edit),
             label: const Text('글쓰기', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
@@ -8624,7 +9172,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 // -------------------------------------------------------------
 
 class WriteRidePostScreen extends StatefulWidget {
-  const WriteRidePostScreen({super.key});
+  final String? initialResortName;
+
+  const WriteRidePostScreen({super.key, this.initialResortName});
 
   @override
   State<WriteRidePostScreen> createState() => _WriteRidePostScreenState();
@@ -8668,6 +9218,15 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialResortName != null && widget.initialResortName!.isNotEmpty && widget.initialResortName != '전체') {
+      final match = kSkiResorts.cast<SkiResort?>().firstWhere(
+        (r) => r!.shortName == widget.initialResortName || r.name.contains(widget.initialResortName!),
+        orElse: () => null,
+      );
+      if (match != null) {
+        _selectedResort = match;
+      }
+    }
     _selectedTimeSlot = _availableTimeSlots.first;
   }
 
