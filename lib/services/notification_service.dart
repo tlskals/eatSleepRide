@@ -134,9 +134,54 @@ class NotificationService {
         onNotificationTap?.call(initialMessage.data['postId'] ?? initialMessage.data['type']);
       }
 
+      // 10. 전체 공지 및 이벤트 기본 토픽 구독
+      try {
+        await _fcm.subscribeToTopic('all_users');
+        debugPrint('🔔 [FCM Topic] \'all_users\' 토픽 구독 완료');
+        await _fcm.subscribeToTopic('events');
+        debugPrint('🔔 [FCM Topic] \'events\' 이벤트 토픽 구독 완료');
+      } catch (e) {
+        debugPrint('🔔 [FCM Topic Init Error]: $e');
+      }
+
       _isInitialized = true;
     } catch (e) {
       debugPrint('🔔 [FCM Init Error]: $e');
+    }
+  }
+
+  /// 🎁 이벤트 및 혜택 알림 토픽 구독/해제 토글
+  Future<void> setEventNotificationEnabled(bool enabled) async {
+    try {
+      if (enabled) {
+        await _fcm.subscribeToTopic('events');
+        debugPrint('🔔 [FCM Topic] \'events\' 구독 활성화');
+      } else {
+        await _fcm.unsubscribeFromTopic('events');
+        debugPrint('🔔 [FCM Topic] \'events\' 구독 해제');
+      }
+    } catch (e) {
+      debugPrint('🔔 [FCM Topic Toggle Error]: $e');
+    }
+  }
+
+  /// 📢 특정 토픽 직접 구독
+  Future<void> subscribeToTopic(String topic) async {
+    try {
+      await _fcm.subscribeToTopic(topic);
+      debugPrint('🔔 [FCM Topic] \'$topic\' 구독 완료');
+    } catch (e) {
+      debugPrint('🔔 [FCM Topic Subscribe Error]: $e');
+    }
+  }
+
+  /// 📢 특정 토픽 구독 해제
+  Future<void> unsubscribeFromTopic(String topic) async {
+    try {
+      await _fcm.unsubscribeFromTopic(topic);
+      debugPrint('🔔 [FCM Topic] \'$topic\' 구독 해제 완료');
+    } catch (e) {
+      debugPrint('🔔 [FCM Topic Unsubscribe Error]: $e');
     }
   }
 

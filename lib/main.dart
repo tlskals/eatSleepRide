@@ -452,6 +452,8 @@ class UserProfile {
   String riderTitle; // 라이더 등급/칭호
   List<RiderBadge> badges; // 획득 배지 목록
   List<String> blockedUsers; // 차단한 사용자 닉네임 목록
+  bool eventNotification; // 🎁 시즌 이벤트 및 혜택 알림 수신 동의 여부 (정보통신망법)
+  DateTime? eventConsentDate; // 수신 동의/변경 일시
 
   UserProfile({
     required this.id,
@@ -468,6 +470,8 @@ class UserProfile {
     this.riderTitle = '골드 라이더 🏂',
     List<RiderBadge>? badges,
     List<String>? blockedUsers,
+    this.eventNotification = true,
+    this.eventConsentDate,
   })  : badges = badges ?? [
           const RiderBadge(
             id: 'first_ride',
@@ -6169,6 +6173,13 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _matchNotification = true;
   bool _chatNotification = true;
+  bool _eventNotification = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _eventNotification = gCurrentUser?.eventNotification ?? true;
+  }
 
   // 이미 사용 중인 닉네임 목록 (중복 체크용)
   final List<String> _takenNicknames = [
@@ -7403,6 +7414,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (val) => setState(() => _chatNotification = val),
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
+          SwitchListTile(
+            secondary: const Icon(Icons.card_giftcard_rounded, color: Color(0xFFE11D48)),
+            title: const Text('시즌 이벤트 및 혜택 알림 (선택)', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+            subtitle: const Text('크리스마스/시즌 특별 매칭 및 게릴라 이벤트 푸시 수신', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+            value: _eventNotification,
+            activeThumbColor: const Color(0xFF2563EB),
+            onChanged: (val) async {
+              setState(() {
+                _eventNotification = val;
+                if (gCurrentUser != null) {
+                  gCurrentUser!.eventNotification = val;
+                  gCurrentUser!.eventConsentDate = DateTime.now();
+                }
+              });
+              await NotificationService.instance.setEventNotificationEnabled(val);
+              if (gCurrentUser != null) {
+                AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
+              }
+              final now = DateTime.now();
+              final dateStr = '${now.year}년 ${now.month}월 ${now.day}일';
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: val ? const Color(0xFF1E3A8A) : Colors.grey.shade800,
+                  content: Text(
+                    val
+                        ? '이벤트 및 혜택 알림 수신에 동의하셨습니다. ($dateStr)'
+                        : '이벤트 및 혜택 알림 수신이 해제되었습니다. ($dateStr)',
+                  ),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(
             leading: const Icon(Icons.block_rounded, color: Colors.redAccent),
             title: const Text('차단된 사용자 관리', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
@@ -7613,7 +7658,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: const Text('⚡ 페널티 해제 & 오늘 매칭 기회 1회 충전', style: TextStyle(fontSize: 11.5)),
             ),
           ),
-          const Divider(height: 1, color: Color(0xFF334155)),
+          const SizedBox(height: 8),
+
+          // 도구 3-2: 이벤트 푸시 수신 시뮬레이션 (크리스마스 시즌 예시)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF881337),
+                foregroundColor: const Color(0xFFFDA4AF),
+                side: const BorderSide(color: Color(0xFFF43F5E)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                NotificationService.instance.showLocalNotification(
+                  title: '🎄 [시즌 이벤트] 크리스마스 슬로프 매칭 페스티벌!',
+                  body: '크리스마스 이브/당일 한정! 성별 선택 & 1:1 슬로프 메이트 매칭 이벤트가 시작됩니다 ⛷️🏂',
+                  payload: 'event_christmas',
+                );
+
+                showDialog(
+                  context: context,
+                  builder: (dialogCtx) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                    title: const Row(
+                      children: [
+                        Text('🎄', style: TextStyle(fontSize: 22)),
+                        SizedBox(width: 8),
+                        Text('시즌 이벤트 푸시 알림', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                      ],
+                    ),
+                    content: const Text(
+                      '【크리스마스 슬로프 매칭 페스티벌】\n\n'
+                      '❄️ 크리스마스 이브 & 당일 한정 특별 이벤트!\n'
+                      '• 선택적 본인 성별 설정 & 같이타요 뱃지 노출\n'
+                      '• 남녀 1:1 슬로프 메이트 신규 랜덤 매칭 오픈\n\n'
+                      '※ 전체 사용자 대상 FCM 이벤트 토픽(\'events\')으로 발송된 실시간 푸시 예시입니다.',
+                      style: TextStyle(fontSize: 13.5, height: 1.5),
+                    ),
+                    actions: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(dialogCtx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE11D48),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('확인'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              icon: const Icon(Icons.campaign_rounded, size: 16),
+              label: const Text('📢 이벤트 푸시 수신 테스트 (크리스마스 시즌 예시)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          const Divider(height: 16, color: Color(0xFF334155)),
           const SizedBox(height: 4),
 
           // 도구 4: 새벽 글작성 제한 시간(02~07시) 우회 토글

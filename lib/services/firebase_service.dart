@@ -199,6 +199,10 @@ class AppFirebaseService {
           snowPoints: data['snowPoints'] ?? 1000,
           riderTitle: data['riderTitle'] ?? '새싹 라이더 🏂',
           blockedUsers: List<String>.from(data['blockedUsers'] ?? []),
+          eventNotification: data['eventNotification'] ?? true,
+          eventConsentDate: (data['eventConsentDate'] is Timestamp)
+              ? (data['eventConsentDate'] as Timestamp).toDate()
+              : null,
         );
         gCurrentUser = loadedProfile;
         return loadedProfile;
@@ -219,6 +223,8 @@ class AppFirebaseService {
           snowPoints: 1000,
           riderTitle: '새싹 라이더 🏂',
           blockedUsers: [],
+          eventNotification: true,
+          eventConsentDate: DateTime.now(),
         );
         await saveUserProfile(newProfile);
         gCurrentUser = newProfile;
@@ -236,6 +242,8 @@ class AppFirebaseService {
         homeResort: '비발디파크',
         level: '중급',
         joinedAt: DateTime(2026, 1, 15),
+        eventNotification: true,
+        eventConsentDate: DateTime.now(),
       );
       gCurrentUser = fallbackProfile;
       return fallbackProfile;
@@ -259,6 +267,8 @@ class AppFirebaseService {
         'snowPoints': profile.snowPoints,
         'riderTitle': profile.riderTitle,
         'blockedUsers': profile.blockedUsers,
+        'eventNotification': profile.eventNotification,
+        'eventConsentDate': profile.eventConsentDate != null ? Timestamp.fromDate(profile.eventConsentDate!) : null,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
