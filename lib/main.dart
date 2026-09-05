@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -6249,6 +6249,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _matchNotification = true;
   bool _chatNotification = true;
   bool _eventNotification = true;
+  int _versionTapCount = 0;
+  bool _showDevMenu = false;
 
   @override
   void initState() {
@@ -6918,12 +6920,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   const SizedBox(height: 24),
 
-                  // 6. 🛠️ QA & 자체 테스트 도구 (Sandbox)
-                  _buildSectionTitle('🛠️ 개발자 & 자체 테스트 도구 (Sandbox)'),
-                  const SizedBox(height: 8),
-                  _buildQASandboxCard(),
-
-                  const SizedBox(height: 24),
+                  // 6. 🛠️ QA & 자체 테스트 도구 (Sandbox) - 릴리즈 모드 및 앱스토어 심사 시 자동 숨김
+                  if (kDebugMode || _showDevMenu) ...[
+                    _buildSectionTitle('🛠️ 개발자 & 자체 테스트 도구 (Sandbox)'),
+                    const SizedBox(height: 8),
+                    _buildQASandboxCard(),
+                    const SizedBox(height: 24),
+                  ],
 
                   // 7. 계정 관리
                   _buildSectionTitle('계정 관리'),
@@ -6932,10 +6935,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   const SizedBox(height: 30),
                   Center(
-                    child: Text(
-                      '같이타요 v1.0.0 • 26/27 시즌\n카카오 • 네이버 • Apple 공식 OAuth 연동',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _versionTapCount++;
+                          if (_versionTapCount >= 5) {
+                            _showDevMenu = !_showDevMenu;
+                            _versionTapCount = 0;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(_showDevMenu
+                                    ? '🛠️ 개발자 샌드박스 도구가 활성화되었습니다.'
+                                    : '🔒 개발자 샌드박스 도구가 숨겨졌습니다.'),
+                                duration: const Duration(seconds: 2),
+                                backgroundColor: const Color(0xFF1E293B),
+                              ),
+                            );
+                          }
+                        });
+                      },
+                      child: Text(
+                        '같이타요 v1.0.0 • 26/27 시즌\n카카오 • 네이버 • Apple 공식 OAuth 연동',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
