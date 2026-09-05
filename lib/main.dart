@@ -490,14 +490,6 @@ class UserProfile {
             unlockedDate: '2026.02.04',
           ),
           const RiderBadge(
-            id: 'powder_expert',
-            title: '설질 감별사',
-            emoji: '❄️',
-            description: '슬로프 사진과 설질 후기를 3회 이상 작성했어요',
-            isUnlocked: true,
-            unlockedDate: '2026.02.12',
-          ),
-          const RiderBadge(
             id: 'night_rider',
             title: '야간 라이더',
             emoji: '🌙',
@@ -2186,9 +2178,9 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
-      initialIndex: widget.initialSubTabIndex.clamp(0, 2),
+      initialIndex: widget.initialSubTabIndex.clamp(0, 1),
     );
     _tabController.addListener(() {
       if (mounted) setState(() {});
@@ -2199,7 +2191,7 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
   void didUpdateWidget(covariant RideTogetherHubScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialSubTabIndex != widget.initialSubTabIndex) {
-      _tabController.animateTo(widget.initialSubTabIndex.clamp(0, 2));
+      _tabController.animateTo(widget.initialSubTabIndex.clamp(0, 1));
     }
   }
 
@@ -2289,16 +2281,6 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
                     ],
                   ),
                 ),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.photo_library_rounded, size: 16),
-                      SizedBox(width: 5),
-                      Text('같이 탔어요'),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -2309,7 +2291,6 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
         children: const [
           RidePostListView(),
           RandomMatchingView(),
-          RideReviewListView(),
         ],
       ),
     );
@@ -5771,7 +5752,35 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('스키장 정보', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.landscape_rounded,
+                color: Color(0xFF2563EB),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '스키장 정보',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: -0.5,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -6421,7 +6430,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildPointEarnRow(emoji: '📅', title: '매일 첫 앱 접속 (출석체크)', points: '+10P', desc: '하루 1회 앱 접속 시 자동 적립'),
                 _buildPointEarnRow(emoji: '⚡️', title: '4인 랜덤 매칭 성공 & 동행', points: '+50P', desc: '초고속 4인 매칭 완료 시 적립'),
                 _buildPointEarnRow(emoji: '🏂', title: '같이타요 모집글 동행 성사', points: '+50P', desc: '모집글 작성 또는 참가 완료 시'),
-                _buildPointEarnRow(emoji: '📸', title: '슬로프 사진 & 설질 후기 등록', points: '+30P', desc: '같이 탔어요 피드에 생생한 후기 작성'),
                 _buildPointEarnRow(emoji: '👤', title: '홈 스키장/프로필 설정', points: '+100P', desc: '최초 가입 및 라이딩 성향 등록 (1회)'),
                 const SizedBox(height: 18),
                 const Divider(height: 1),
@@ -6687,9 +6695,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('개인설정 & 활동기록', style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
         backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.manage_accounts_rounded,
+                color: Color(0xFF2563EB),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '개인설정 & 활동기록',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: -0.5,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
       ),
       body: user == null
           ? _buildLoggedOutView()
