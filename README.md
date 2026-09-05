@@ -5,47 +5,37 @@
 
 ---
 
-## 📌 App Store Connect 등록용 공식 링크
-
-* 🔒 **[개인정보 처리방침 (Privacy Policy)](PRIVACY_POLICY.md)**
-  * *App Store Connect '개인정보 처리방침 URL'에 아래 링크를 그대로 입력하시면 됩니다:*  
-    `https://github.com/tlskals/eatSleepRide/blob/main/PRIVACY_POLICY.md`
-* 📜 **[서비스 이용약관 & 커뮤니티 가이드라인 (Terms of Service)](TERMS_OF_SERVICE.md)**
-* 💬 **[고객지원 및 문의 (Support & Inquiries)](https://github.com/tlskals/eatSleepRide/issues)**
-
----
-
-## 🌟 주요 핵심 기능
+## 🌟 주요 기능
 
 ### 1. ⚡ 초고속 4인 실시간 랜덤 매칭
-* **1일 1회 클린 매칭 원칙**: 무분별한 방 낚시 및 어뷰징 방지
-* **철저한 탈주 방어**: 매칭 완료 후 무단 퇴장 시 2시간 동안 모든 글쓰기/참가 제한 페널티
-* **원클릭 즉시 충원**: 1명이 나가도 방이 깨지지 않고 남은 3명이 `[⚡ 1명 즉시 충원]` 버튼으로 새로운 메이트 즉시 합류
+* **1일 1회 클린 매칭**: 무분별한 어뷰징 및 조건 낚시 방지
+* **탈주 방어 페널티**: 매칭 완료 후 무단 퇴장 시 2시간 동안 모집글 작성 및 참여 제한
+* **원클릭 즉시 충원**: 1명이 퇴장해도 남은 3명이 `[⚡ 1명 즉시 충원]` 버튼으로 새 메이트 즉시 영입
 
 ### 2. 🏂 베이스(스키장)별 맞춤 '같이 타요' 모집
-* **전국 12개 공식 스키장 전용 피드**: 곤지암, 비발디, 용평, 휘닉스, 하이원, 웰리힐리, 지산 등
+* **전국 12개 공식 스키장 피드**: 곤지암, 비발디, 용평, 휘닉스, 하이원, 웰리힐리, 지산 등
 * **정밀 다중 필터**: 종목(스키/보드), 실력(초급/중급/상급), 운영 시간대(주간/야간/심야), 슬로프별 검색
-* **클린 피드 관리**: 매일 새벽 02:00 정비 시간 만료글 자동 정리 및 연동 대화방 자동 닫힘
+* **스마트 피드 관리**: 매일 새벽 02:00 만료글 자동 정리 및 연동 대화방 자동 닫힘
 
 ### 3. ❄️ 전국 12개 스키장 실시간 날씨 & 5일 강설 예보
 * **Open-Meteo 글로벌 기상 API 연동**: 실시간 기온, 체감 온도, 풍속 자동 갱신
 * **5일 주간 날씨 & 눈 예보**: 원정/숙박 라이더를 위한 강설량(`❄️ 3.5cm`) 하이라이트
-* **초고화질 슬로프맵**: 곤지암, 웰리힐리, 오투, 하이원 등 공식 고화질 맵 탑재
+* **고화질 공식 슬로프맵 탑재**
 
-### 4. 🛡️ 24시간 무인 안심 방어 (Apple 가이드라인 1.2 준수)
+### 4. 🛡️ 안심 커뮤니티 보호 시스템
 * **금칙어·외부링크 실시간 차단**: 음란/도박 키워드 및 외부 메신저/연락처 노출 100% 자동 차단
 * **원터치 차단 및 신고**: 악성 유저 차단 및 게시글 원클릭 신고
-* **3회 누적 신고 자동 블라인드**: 서로 다른 라이더 3회 신고 시 관리자 승인 없이 피드에서 즉각 자동 숨김
+* **3회 누적 신고 자동 블라인드**: 서로 다른 이용자 3회 신고 시 피드에서 즉각 자동 숨김
 
-### 5. 🔒 완벽한 개인정보 보호 & 회원탈퇴 (Apple 가이드라인 5.1.1(v) 준수)
-* **100% 익명성 보장**: 전화번호/실명 수집 없음, 안전한 소셜 OAuth (Apple, Kakao, Naver) 지원
-* **인앱 회원탈퇴 (`deleteUserAccount`)**: 설정 메뉴에서 언제든 즉시 탈퇴 가능, 탈퇴 시 Firestore 문서, 세션, 알림 토큰 영구 즉시 파기
+### 5. 🔒 철저한 개인정보 보호 및 데이터 주권
+* **100% 익명성 보장**: 불필요한 민감 개인정보(전화번호/실명) 미수집
+* **인앱 회원탈퇴 지원**: 계정 탈퇴 시 클라우드 저장 데이터 즉시 영구 파기
 
 ---
 
 ## 🏔️ 지원 스키장 목록 (12개 리조트)
 
-| 스키장명 | 위치 | 실시간 날씨 | 고화질 맵 |
+| 스키장명 | 위치 | 실시간 날씨 | 슬로프맵 |
 | :--- | :--- | :---: | :---: |
 | **곤지암리조트** | 경기 광주 | ✅ | ✅ |
 | **비발디파크** | 강원 홍천 | ✅ | ✅ |
@@ -64,27 +54,19 @@
 
 ## 🛠️ 기술 스택 (Tech Stack)
 
-* **프레임워크**: Flutter 3.x (Dart 3.x)
-* **클라우드 & 백엔드**: Google Cloud Firebase
-  * `Cloud Firestore` (실시간 동행 모집글 및 채팅 스트림)
-  * `Firebase Authentication` (소셜 OAuth 연동)
-  * `Firebase Cloud Messaging (FCM)` (푸시 알림)
-  * `Firebase Storage` (고화질 이미지 에셋)
-* **외부 API**: Open-Meteo Weather API
-* **지원 플랫폼**: iOS (App Store), Android
+* **Frontend**: Flutter (Dart 3.x), Material 3
+* **Backend & Cloud**: Google Cloud Firebase (Firestore, Auth, Storage, Cloud Messaging)
+* **API**: Open-Meteo Weather API
+* **Supported Platforms**: iOS, Android
 
 ---
 
-## 🍎 Apple App Store Review Notes (심사관 안내)
+## 📄 Policies & Support
 
-* **인증 (Authentication)**: `Sign in with Apple`을 기본 제공하므로, 심사관의 Apple ID로 원클릭 즉시 접속 및 전체 기능 테스트가 가능합니다.
-* **UGC 안전 시스템**: 금칙어 필터링, 사용자 차단, 3회 신고 시 실시간 자동 블라인드 처리가 구현되어 있습니다.
-* **회원탈퇴**: `개인설정` > `회원탈퇴`를 통해 언제든지 계정 및 클라우드 데이터를 즉시 영구 삭제할 수 있습니다.
+* [Privacy Policy (개인정보 처리방침)](PRIVACY_POLICY.md)
+* [Terms of Service (이용약관)](TERMS_OF_SERVICE.md)
+* [Support & Issues (고객지원)](https://github.com/tlskals/eatSleepRide/issues)
 
 ---
 
-## 📬 고객지원 및 문의
-
-* **이메일 문의**: tlskals@naver.com
-* **버그 리포트 & 기능 제안**: [GitHub Issues](https://github.com/tlskals/eatSleepRide/issues)
-* **Copyright © 2026 tlskals. All rights reserved.**
+**Copyright © 2026 tlskals. All rights reserved.**
