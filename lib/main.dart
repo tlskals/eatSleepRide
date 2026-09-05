@@ -1380,6 +1380,7 @@ class WeatherService {
 // -------------------------------------------------------------
 
 List<RidePost> createInitialSamplePosts() {
+  final now = DateTime.now();
   return [
     RidePost(
       id: 'test_post_1',
@@ -1398,17 +1399,18 @@ List<RidePost> createInitialSamplePosts() {
       authorName: '평창눈사람',
       isJoined: false,
       isAuthor: false,
+      createdAt: now.subtract(const Duration(minutes: 15)),
       chatMessages: [
         ChatMessage(
           sender: '시스템',
           text: '모나용평 슬로프 메이트 대화방이 개설되었습니다.\n참가자들과 상세 위치 및 복장(헬멧/자켓 색상)을 조율해보세요!',
-          time: DateTime.now().subtract(const Duration(minutes: 45)),
+          time: now.subtract(const Duration(minutes: 15)),
           isSystem: true,
         ),
         ChatMessage(
           sender: '평창눈사람 (방장)',
           text: '안녕하세요! 오늘 야간에 핑크 리프트 앞에서 뵈어요. 저는 노란 자켓에 흰 헬멧 착용 중입니다~',
-          time: DateTime.now().subtract(const Duration(minutes: 40)),
+          time: now.subtract(const Duration(minutes: 10)),
           isMe: false,
         ),
       ],
@@ -1423,25 +1425,80 @@ List<RidePost> createInitialSamplePosts() {
       style: '테크니컬라이딩',
       skillLevel: '중급',
       purpose: '팔로잉',
-      dateText: '내일',
+      dateText: '오늘',
       timeSlot: '심야 (22~02)',
       maxMembers: 1,
       currentMembers: 1,
       authorName: '곤지암라이더',
       isJoined: false,
       isAuthor: false,
+      createdAt: now.subtract(const Duration(minutes: 35)),
       chatMessages: [
         ChatMessage(
           sender: '시스템',
           text: '곤지암리조트 슬로프 메이트 대화방이 개설되었습니다.\n참가자들과 상세 위치 및 복장(헬멧/자켓 색상)을 조율해보세요!',
-          time: DateTime.now().subtract(const Duration(hours: 2)),
+          time: now.subtract(const Duration(minutes: 35)),
           isSystem: true,
         ),
         ChatMessage(
           sender: '곤지암라이더 (방장)',
           text: '고프로 액션캠 배터리 완충해뒀습니다! 참가하시면 베이스 카페 앞에서 인사 나누고 올라가요!',
-          time: DateTime.now().subtract(const Duration(hours: 1, minutes: 50)),
+          time: now.subtract(const Duration(minutes: 25)),
           isMe: false,
+        ),
+      ],
+    ),
+    RidePost(
+      id: 'test_post_3',
+      title: '비발디파크 락/테크노에서 그라운드트릭 원포인트 팁 나눠요 🏂',
+      content: '버터링이랑 널리 연습 중인 3년차 보더입니다! 같이 타면서 서로 자세 봐주실 분 편하게 들어오세요~',
+      resortName: '비발디파크 (홍천)',
+      slopes: ['락 (중급)', '테크노 (상급)'],
+      discipline: '보드',
+      style: '그라운드트릭',
+      skillLevel: '중급',
+      purpose: '원포인트',
+      dateText: '오늘',
+      timeSlot: '주간 (08:30~16:30)',
+      maxMembers: 3,
+      currentMembers: 2,
+      authorName: '비발디보더',
+      isJoined: false,
+      isAuthor: false,
+      createdAt: now.subtract(const Duration(minutes: 50)),
+      chatMessages: [
+        ChatMessage(
+          sender: '시스템',
+          text: '비발디파크 슬로프 메이트 대화방이 개설되었습니다.',
+          time: now.subtract(const Duration(minutes: 50)),
+          isSystem: true,
+        ),
+      ],
+    ),
+    RidePost(
+      id: 'test_post_4',
+      title: '하이원 마운틴탑 롱 슬로프 관광보딩 메이트 모십니다 🏔️',
+      content: '풍경 감상하면서 여유롭게 롱 라이딩 즐기실 분! 초보분들도 환영합니다. 천천히 안전하게 내려와요.',
+      resortName: '하이원리조트 (정선)',
+      slopes: ['아테나 (초급)', '제우스 (초중급)'],
+      discipline: '스키',
+      style: '프리스키',
+      skillLevel: '초급',
+      purpose: '같이타요',
+      dateText: '오늘',
+      timeSlot: '주간 (09:00~16:00)',
+      maxMembers: 2,
+      currentMembers: 1,
+      authorName: '하이원새내기',
+      isJoined: false,
+      isAuthor: false,
+      createdAt: now.subtract(const Duration(hours: 1, minutes: 10)),
+      chatMessages: [
+        ChatMessage(
+          sender: '시스템',
+          text: '하이원리조트 슬로프 메이트 대화방이 개설되었습니다.',
+          time: now.subtract(const Duration(hours: 1, minutes: 10)),
+          isSystem: true,
         ),
       ],
     ),
@@ -1456,26 +1513,35 @@ List<RidePost> gRidePosts = createInitialSamplePosts();
 // -------------------------------------------------------------
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  final int initialIndex;
+  final int initialHubSubTab;
+  const MainScreen({super.key, this.initialIndex = 0, this.initialHubSubTab = 0});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0; // 홈 탭 기본 활성화
-  int _hubSubTabIndex = 0;
+  late int _currentIndex;
+  late int _hubSubTabIndex;
   StreamSubscription<List<RidePost>>? _postsSubscription;
   StreamSubscription<List<RideReview>>? _reviewsSubscription;
 
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
+    _hubSubTabIndex = widget.initialHubSubTab;
     // 🌐 실시간 모집글 스트림 구독
     _postsSubscription = AppFirebaseService.instance.streamRidePosts().listen((posts) {
-      if (mounted && posts.isNotEmpty) {
+      if (mounted) {
+        final activePosts = posts.where((p) => !p.shouldHide).toList();
         setState(() {
-          gRidePosts = posts;
+          if (activePosts.isNotEmpty) {
+            gRidePosts = posts;
+          } else {
+            gRidePosts = createInitialSamplePosts();
+          }
         });
       }
     });
