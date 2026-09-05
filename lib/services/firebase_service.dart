@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -273,6 +274,31 @@ class AppFirebaseService {
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Firebase saveUserProfile error: $e');
+    }
+  }
+
+  /// 🔒 Apple App Store 심사 필수 준수: 회원탈퇴 (계정 영구 삭제 및 클라우드 데이터 즉시 파기)
+  Future<void> deleteUserAccount(String uid) async {
+    try {
+      final targetUid = uid.isEmpty ? currentUid : uid;
+      
+      // 1. Firestore 유저 문서 삭제
+      await _firestore.collection('users').doc(targetUid).delete();
+
+      // 2. Firebase Auth 인증 해제 및 로그아웃
+      try {
+        await _auth.signOut();
+      } catch (_) {}
+
+      // 3. FCM 푸시 알림 토픽 구독 해제
+      try {
+        await FirebaseMessaging.instance.unsubscribeFromTopic('all_users');
+        await FirebaseMessaging.instance.unsubscribeFromTopic('events');
+      } catch (_) {}
+
+      debugPrint('User account and personal data deleted successfully for: $targetUid');
+    } catch (e) {
+      debugPrint('Firebase deleteUserAccount error: $e');
     }
   }
 

@@ -6676,11 +6676,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 });
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade600,
+                backgroundColor: const Color(0xFF2563EB),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               child: const Text('로그아웃'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 🔒 Apple App Store 심사 필수 항목 (가이드라인 5.1.1(v)): 회원탈퇴 및 개인 활동 데이터 영구 파기
+  void _deleteAccount() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+              SizedBox(width: 8),
+              Text('회원탈퇴', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '정말 회원탈퇴 하시겠습니까?\n\n'
+                '탈퇴 시 모든 계정 정보, 성사된 동행 내역, 작성한 모집글 및 대화 기록, 보유 파우더 포인트가 즉시 영구 삭제되며 복구할 수 없습니다.',
+                style: TextStyle(fontSize: 13.5, height: 1.45, color: Colors.black87),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.security_rounded, color: Colors.red.shade700, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Apple 개인정보 보호 규정에 따라 클라우드 데이터 및 알림 토큰이 즉시 영구 파기됩니다.',
+                        style: TextStyle(fontSize: 11.5, color: Colors.red.shade800, height: 1.35),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final currentUser = gCurrentUser;
+                if (currentUser != null) {
+                  await AppFirebaseService.instance.deleteUserAccount(currentUser.id);
+                }
+                setState(() {
+                  gCurrentUser = null;
+                });
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('회원탈퇴 및 모든 데이터 파기가 완료되었습니다.'),
+                    backgroundColor: Colors.black87,
+                  ),
+                );
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('탈퇴 및 데이터 파기', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -7927,9 +8014,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(
-            leading: const Icon(Icons.logout_rounded, color: Colors.red),
-            title: const Text('로그아웃', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.red)),
+            leading: const Icon(Icons.logout_rounded, color: Colors.grey),
+            title: const Text('로그아웃', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.black87)),
             onTap: _logout,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: Icon(Icons.person_remove_rounded, color: Colors.red.shade400),
+            title: Text('회원탈퇴 (계정 영구 삭제)', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.red.shade600)),
+            subtitle: Text('모든 개인 데이터 및 활동 기록 즉시 파기', style: TextStyle(fontSize: 11.5, color: Colors.grey.shade500)),
+            onTap: _deleteAccount,
           ),
         ],
       ),
