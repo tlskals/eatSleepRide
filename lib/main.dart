@@ -411,6 +411,7 @@ enum SocialAuthProvider {
   kakao,
   naver,
   apple,
+  google,
 }
 
 // -------------------------------------------------------------
@@ -529,6 +530,8 @@ class UserProfile {
         return '네이버 계정 연동';
       case SocialAuthProvider.apple:
         return 'Apple ID 연동';
+      case SocialAuthProvider.google:
+        return 'Google 계정 연동';
     }
   }
 
@@ -540,6 +543,8 @@ class UserProfile {
         return const Color(0xFF03C75A);
       case SocialAuthProvider.apple:
         return Colors.black;
+      case SocialAuthProvider.google:
+        return Colors.white;
     }
   }
 
@@ -550,6 +555,8 @@ class UserProfile {
       case SocialAuthProvider.naver:
       case SocialAuthProvider.apple:
         return Colors.white;
+      case SocialAuthProvider.google:
+        return const Color(0xFF1F1F1F);
     }
   }
 
@@ -7355,7 +7362,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Text(
                         user.provider == SocialAuthProvider.kakao
                             ? 'K'
-                            : (user.provider == SocialAuthProvider.naver ? 'N' : ''),
+                            : (user.provider == SocialAuthProvider.naver
+                                ? 'N'
+                                : (user.provider == SocialAuthProvider.google ? 'G' : '')),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -7400,7 +7409,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: user.provider == SocialAuthProvider.kakao ? const Color(0xFF854D0E) : (user.provider == SocialAuthProvider.naver ? const Color(0xFF15803D) : Colors.black87),
+                          color: user.provider == SocialAuthProvider.kakao
+                              ? const Color(0xFF854D0E)
+                              : (user.provider == SocialAuthProvider.naver
+                                  ? const Color(0xFF15803D)
+                                  : (user.provider == SocialAuthProvider.google
+                                      ? const Color(0xFF1E3A8A)
+                                      : Colors.black87)),
                         ),
                       ),
                     ),
@@ -8121,7 +8136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // -------------------------------------------------------------
-// OAuth 소셜 로그인 화면 (카카오 • 네이버 • 애플 3종 전용)
+// OAuth 소셜 로그인 화면 (카카오 • 네이버 • Apple • Google 전용)
 // -------------------------------------------------------------
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -8132,6 +8147,8 @@ class LoginScreen extends StatelessWidget {
       profile = await AppFirebaseService.instance.signInWithKakao();
     } else if (provider == SocialAuthProvider.apple) {
       profile = await AppFirebaseService.instance.signInWithApple();
+    } else if (provider == SocialAuthProvider.google) {
+      profile = await AppFirebaseService.instance.signInWithGoogle();
     } else {
       profile = await AppFirebaseService.instance.signInWithNaver();
     }
@@ -8239,7 +8256,29 @@ class LoginScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // 2. 네이버 로그인 버튼 (#03C75A)
+              // 2. Apple 로그인 버튼 (White)
+              _buildSocialButton(
+                context: context,
+                provider: SocialAuthProvider.apple,
+                title: 'Apple로 계속하기',
+                bgColor: Colors.white,
+                textColor: Colors.black,
+                iconWidget: const Icon(Icons.apple_rounded, color: Colors.black, size: 24),
+              ),
+              const SizedBox(height: 12),
+
+              // 3. Google 로그인 버튼 (White / Modern Dark Theme Contrast)
+              _buildSocialButton(
+                context: context,
+                provider: SocialAuthProvider.google,
+                title: 'Google로 시작하기',
+                bgColor: Colors.white,
+                textColor: const Color(0xFF1F1F1F),
+                iconWidget: _buildGoogleLogo(size: 20),
+              ),
+              const SizedBox(height: 12),
+
+              // 4. 네이버 로그인 버튼 (#03C75A)
               _buildSocialButton(
                 context: context,
                 provider: SocialAuthProvider.naver,
@@ -8260,17 +8299,6 @@ class LoginScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-
-              // 3. Apple 로그인 버튼 (Black)
-              _buildSocialButton(
-                context: context,
-                provider: SocialAuthProvider.apple,
-                title: 'Apple로 계속하기',
-                bgColor: Colors.white,
-                textColor: Colors.black,
-                iconWidget: const Icon(Icons.apple_rounded, color: Colors.black, size: 24),
               ),
 
               const SizedBox(height: 24),
@@ -8342,7 +8370,63 @@ class LoginScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildGoogleLogo({double size = 20}) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _GoogleLogoPainter(),
+      ),
+    );
+  }
 }
+
+class _GoogleLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final strokeWidth = size.width * 0.22;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+    final rect = Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
+
+    // Red (Top arc)
+    paint.color = const Color(0xFFEA4335);
+    canvas.drawArc(rect, -3.14159 * 0.75, 3.14159 * 0.5, false, paint);
+
+    // Yellow (Left arc)
+    paint.color = const Color(0xFFFBBC05);
+    canvas.drawArc(rect, 3.14159 * 0.75, 3.14159 * 0.5, false, paint);
+
+    // Green (Bottom arc)
+    paint.color = const Color(0xFF34A853);
+    canvas.drawArc(rect, 3.14159 * 0.25, 3.14159 * 0.5, false, paint);
+
+    // Blue (Right arc)
+    paint.color = const Color(0xFF4285F4);
+    canvas.drawArc(rect, -3.14159 * 0.25, 3.14159 * 0.5, false, paint);
+
+    // Blue horizontal bar
+    final barPaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.square;
+    canvas.drawLine(
+      Offset(center.dx, center.dy),
+      Offset(size.width - strokeWidth / 2, center.dy),
+      barPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 
 // -------------------------------------------------------------
 // 게시글 상세 화면

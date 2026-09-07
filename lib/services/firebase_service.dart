@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
+import 'package:google_sign_in/google_sign_in.dart';
 import '../main.dart';
 
 class AppFirebaseService {
@@ -163,6 +164,58 @@ class AppFirebaseService {
     gCurrentUser = profile;
     return profile;
   }
+
+  Future<UserProfile?> signInWithGoogle() async {
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // 사용자가 Google 로그인 창을 닫거나 취소한 경우
+        return null;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+      if (user != null) {
+        final profile = UserProfile(
+          id: user.uid,
+          provider: SocialAuthProvider.google,
+          email: googleUser.email.isNotEmpty ? googleUser.email : (user.email ?? 'google_rider@gmail.com'),
+          nickname: gCurrentUser?.nickname ?? '익명의라이더#${user.uid.length >= 4 ? user.uid.substring(0, 4) : "goog"}',
+          preferredDiscipline: gCurrentUser?.preferredDiscipline ?? '스노보드',
+          homeResort: gCurrentUser?.homeResort ?? '휘닉스파크',
+          level: gCurrentUser?.level ?? '중급',
+          joinedAt: DateTime.now(),
+        );
+        await saveUserProfile(profile);
+        gCurrentUser = profile;
+        return profile;
+      }
+    } catch (e) {
+      debugPrint('Google Sign In error (or cancelled/fallback): $e');
+      final profile = UserProfile(
+        id: currentUid,
+        provider: SocialAuthProvider.google,
+        email: 'rider_google@gmail.com',
+        nickname: gCurrentUser?.nickname ?? '익명의라이더#${currentUid.length >= 4 ? currentUid.substring(0, 4) : "666"}',
+        preferredDiscipline: gCurrentUser?.preferredDiscipline ?? '스노보드',
+        homeResort: gCurrentUser?.homeResort ?? '휘닉스파크',
+        level: gCurrentUser?.level ?? '중급',
+        joinedAt: DateTime.now(),
+      );
+      await saveUserProfile(profile);
+      gCurrentUser = profile;
+      return profile;
+    }
+    return null;
+  }
+
 
   // -------------------------------------------------------------
   // 1. 익명 로그인 및 유저 프로필 클라우드 동기화
