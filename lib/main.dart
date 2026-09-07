@@ -10241,7 +10241,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
             const Text('9. 익명 모드 설정', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: _isAnonymous ? const Color(0xFF2563EB).withValues(alpha: 0.06) : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(12),
@@ -10250,73 +10250,36 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
                   width: _isAnonymous ? 1.5 : 1.0,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: _isAnonymous ? const Color(0xFF2563EB).withValues(alpha: 0.15) : Colors.grey.shade200,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          _isAnonymous ? Icons.shield_rounded : Icons.person_outline_rounded,
-                          color: _isAnonymous ? const Color(0xFF2563EB) : Colors.grey.shade700,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  '익명 모드로 등록',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: _isAnonymous ? const Color(0xFF2563EB) : Colors.grey.shade400,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    _isAnonymous ? 'ON (기본값)' : 'OFF',
-                                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _isAnonymous
-                                  ? '개인설정에서 변경한 닉네임 대신 \'익명의라이더 A, B, C, D\' 순으로 제공됩니다.'
-                                  : '내 프로필 닉네임(\'${gCurrentUser?.nickname ?? '익명의라이더'}\')으로 공개됩니다.',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: _isAnonymous ? const Color(0xFF1E40AF) : Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch.adaptive(
-                        value: _isAnonymous,
-                        activeTrackColor: const Color(0xFF2563EB),
-                        activeThumbColor: Colors.white,
-                        onChanged: (val) {
-                          setState(() {
-                            _isAnonymous = val;
-                          });
-                        },
-                      ),
-
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _isAnonymous ? const Color(0xFF2563EB).withValues(alpha: 0.15) : Colors.grey.shade200,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isAnonymous ? Icons.shield_rounded : Icons.person_outline_rounded,
+                      color: _isAnonymous ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      '익명 모드로 등록',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: _isAnonymous,
+                    activeTrackColor: const Color(0xFF2563EB),
+                    activeThumbColor: Colors.white,
+                    onChanged: (val) {
+                      setState(() {
+                        _isAnonymous = val;
+                      });
+                    },
                   ),
                 ],
               ),
