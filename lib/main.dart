@@ -356,6 +356,9 @@ class RidePost {
   bool isBlinded;
   List<String> reportedUserIds;
 
+  // 🛡️ 익명 모드 (기본값 ON: '익명의라이더 A, B, C, D' 순차 부여)
+  bool isAnonymous;
+
   RidePost({
     required this.id,
     required this.title,
@@ -381,9 +384,18 @@ class RidePost {
     this.reportCount = 0,
     this.isBlinded = false,
     List<String>? reportedUserIds,
+    this.isAnonymous = true,
   })  : createdAt = createdAt ?? DateTime.now(),
         participantNames = participantNames ?? [authorName],
         reportedUserIds = reportedUserIds ?? [];
+
+  static const List<String> kAnonymousLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+  String getNextAnonymousName() {
+    final nextIndex = participantNames.length;
+    final letter = kAnonymousLetters[nextIndex % kAnonymousLetters.length];
+    return '익명의라이더 $letter';
+  }
 
   DateTime get expiresAt {
     final base = createdAt;
@@ -402,6 +414,7 @@ class RidePost {
   bool get canAccessChat => (isAuthor || isJoined) && !isExpired && !isBlinded;
   bool get shouldHide => isBlinded || reportCount >= 3 || isExpired;
 }
+
 
 // -------------------------------------------------------------
 // OAuth 소셜 인증 및 사용자 프로필 모델 (카카오, 네이버, 애플 전용)
@@ -3369,13 +3382,31 @@ class _RidePostListViewState extends State<RidePostListView> {
                   const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      '${post.dateText} ${post.timeSlot} • ${post.authorName}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${post.dateText} ${post.timeSlot} • ${post.authorName}',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (post.isAnonymous) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('익명', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+
                   if (post.bumpedAt != null) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -8568,17 +8599,23 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
   }
 
   void _executeJoinRide() {
-    final myNickname = gCurrentUser?.nickname ?? '익명의 라이더';
+    final String myAssignedName;
+    if (widget.post.isAnonymous) {
+      myAssignedName = widget.post.getNextAnonymousName();
+    } else {
+      myAssignedName = gCurrentUser?.nickname ?? '익명의 라이더';
+    }
+
     setState(() {
       widget.post.isJoined = true;
       widget.post.currentMembers += 1;
-      if (!widget.post.participantNames.contains(myNickname)) {
-        widget.post.participantNames.add(myNickname);
+      if (!widget.post.participantNames.contains(myAssignedName)) {
+        widget.post.participantNames.add(myAssignedName);
       }
       widget.post.chatMessages.add(
         ChatMessage(
           sender: '시스템',
-          text: '새로운 슬로프 메이트가 대화방에 참여했습니다! 👋\n만남 장소와 착용 복장을 조율해보세요.',
+          text: '새로운 슬로프 메이트($myAssignedName)가 대화방에 참여했습니다! 👋\n만남 장소와 착용 복장을 조율해보세요.',
           time: DateTime.now(),
           isSystem: true,
         ),
@@ -8587,16 +8624,16 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
 
     // 🚀 Firestore 실시간 참여 동기화
     if (widget.post.id.isNotEmpty) {
-      AppFirebaseService.instance.toggleJoinRidePost(widget.post.id, myNickname);
+      AppFirebaseService.instance.toggleJoinRidePost(widget.post.id, myAssignedName);
     }
 
     // 🔔 방장에게 동행 참가 푸시 알림 전송 (상대방 기기만 수신)
     NotificationService.instance.notifyRider(
-      senderNickname: myNickname,
+      senderNickname: myAssignedName,
       targetAuthorName: widget.post.authorName,
       targetParticipants: [widget.post.authorName],
       title: '🎉 [${widget.post.resortName.split(' ')[0]}] 동행 참가 알림',
-      body: '\'$myNickname\' 님이 \'${widget.post.title}\' 모임에 참가했습니다!',
+      body: '\'$myAssignedName\' 님이 \'${widget.post.title}\' 모임에 참가했습니다!',
       type: 'ride_join',
       postId: widget.post.id,
     );
@@ -8608,6 +8645,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
       ),
     );
   }
+
 
   void _showBlockAuthorDialog() {
     showDialog(
@@ -8762,7 +8800,30 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(post.authorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Row(
+                      children: [
+                        Text(post.authorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        if (post.isAnonymous) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.shield_rounded, size: 10, color: Color(0xFF2563EB)),
+                                SizedBox(width: 2),
+                                Text('익명모드', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                     Text('모집현황: ${post.currentMembers}/${post.maxMembers + 1}명', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
                 ),
@@ -8773,6 +8834,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                   const Chip(label: Text('참가 중', style: TextStyle(fontSize: 11, color: Colors.green))),
               ],
             ),
+
             const SizedBox(height: 18),
             Text(
               post.title,
@@ -9006,13 +9068,28 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       return;
     }
 
-    final myNickname = gCurrentUser?.nickname ?? '익명의 라이더';
+    final String myNickname;
+    if (widget.post.isAnonymous) {
+      if (widget.post.isAuthor) {
+        myNickname = '익명의라이더 A (방장)';
+      } else {
+        final anonJoined = widget.post.participantNames.firstWhere(
+          (name) => name != widget.post.authorName && name.startsWith('익명의라이더'),
+          orElse: () => '익명의라이더 B',
+        );
+        myNickname = anonJoined;
+      }
+    } else {
+      myNickname = gCurrentUser?.nickname ?? '익명의 라이더';
+    }
+
     final newMsg = ChatMessage(
       sender: myNickname,
       text: text,
       time: DateTime.now(),
       isMe: true,
     );
+
 
     setState(() {
       widget.post.chatMessages.add(newMsg);
@@ -9595,6 +9672,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
   DateTime _selectedDate = DateTime.now();
   String _selectedTimeSlot = '주간 (09~17)';
   int _selectedMemberCount = 1;
+  bool _isAnonymous = true; // 🛡️ 익명 모드 (디폴트: ON)
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
@@ -9740,7 +9818,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
     final String formattedDate =
         '${_selectedDate.month}월 ${_selectedDate.day}일(${_getWeekDayName(_selectedDate.weekday)})';
 
-    final author = gCurrentUser?.nickname ?? '나 (방장)';
+    final author = _isAnonymous ? '익명의라이더 A' : (gCurrentUser?.nickname ?? '나 (방장)');
     final newPost = RidePost(
       id: '',
       title: title,
@@ -9756,8 +9834,10 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
       maxMembers: _selectedMemberCount,
       currentMembers: 1,
       authorName: author,
+      participantNames: [author],
       isAuthor: true,
       isJoined: true,
+      isAnonymous: _isAnonymous,
       chatMessages: [
         ChatMessage(
           sender: '시스템',
@@ -9767,6 +9847,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
         ),
       ],
     );
+
 
     // 🚀 Firestore 클라우드에 실시간 저장
     AppFirebaseService.instance.createRidePost(newPost);
@@ -10156,7 +10237,92 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
               ),
               style: const TextStyle(fontSize: 13.5),
             ),
+            const SizedBox(height: 16),
+            const Text('9. 익명 모드 설정', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: _isAnonymous ? const Color(0xFF2563EB).withValues(alpha: 0.06) : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isAnonymous ? const Color(0xFF2563EB).withValues(alpha: 0.3) : Colors.grey.shade300,
+                  width: _isAnonymous ? 1.5 : 1.0,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: _isAnonymous ? const Color(0xFF2563EB).withValues(alpha: 0.15) : Colors.grey.shade200,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _isAnonymous ? Icons.shield_rounded : Icons.person_outline_rounded,
+                          color: _isAnonymous ? const Color(0xFF2563EB) : Colors.grey.shade700,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  '익명 모드로 등록',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: _isAnonymous ? const Color(0xFF2563EB) : Colors.grey.shade400,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    _isAnonymous ? 'ON (기본값)' : 'OFF',
+                                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _isAnonymous
+                                  ? '개인설정에서 변경한 닉네임 대신 \'익명의라이더 A, B, C, D\' 순으로 제공됩니다.'
+                                  : '내 프로필 닉네임(\'${gCurrentUser?.nickname ?? '익명의라이더'}\')으로 공개됩니다.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: _isAnonymous ? const Color(0xFF1E40AF) : Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch.adaptive(
+                        value: _isAnonymous,
+                        activeTrackColor: const Color(0xFF2563EB),
+                        activeThumbColor: Colors.white,
+                        onChanged: (val) {
+                          setState(() {
+                            _isAnonymous = val;
+                          });
+                        },
+                      ),
+
+                    ],
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 32),
+
           ],
         ),
       ),

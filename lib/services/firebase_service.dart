@@ -367,9 +367,12 @@ class AppFirebaseService {
         final data = doc.data();
         final currentUserName = gCurrentUser?.nickname ?? '';
         final participants = List<String>.from(data['participantNames'] ?? []);
+        final participantUids = List<String>.from(data['participantUids'] ?? []);
         final author = data['authorName'] ?? '익명';
-        final isAuthor = author == currentUserName;
-        final isJoined = participants.contains(currentUserName) || isAuthor;
+        final authorUid = data['authorUid'] ?? '';
+        final isAnonymous = data['isAnonymous'] as bool? ?? true;
+        final isAuthor = (authorUid.isNotEmpty && authorUid == currentUid) || author == currentUserName;
+        final isJoined = participantUids.contains(currentUid) || participants.contains(currentUserName) || isAuthor;
 
         DateTime? createdAt;
         if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
@@ -398,6 +401,7 @@ class AppFirebaseService {
           participantNames: participants,
           isJoined: isJoined,
           isAuthor: isAuthor,
+          isAnonymous: isAnonymous,
           chatMessages: [],
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
@@ -416,9 +420,12 @@ class AppFirebaseService {
         final data = doc.data();
         final currentUserName = gCurrentUser?.nickname ?? '';
         final participants = List<String>.from(data['participantNames'] ?? []);
+        final participantUids = List<String>.from(data['participantUids'] ?? []);
         final author = data['authorName'] ?? '익명';
-        final isAuthor = author == currentUserName;
-        final isJoined = participants.contains(currentUserName) || isAuthor;
+        final authorUid = data['authorUid'] ?? '';
+        final isAnonymous = data['isAnonymous'] as bool? ?? true;
+        final isAuthor = (authorUid.isNotEmpty && authorUid == currentUid) || author == currentUserName;
+        final isJoined = participantUids.contains(currentUid) || participants.contains(currentUserName) || isAuthor;
 
         DateTime? createdAt;
         if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
@@ -447,6 +454,7 @@ class AppFirebaseService {
           participantNames: participants,
           isJoined: isJoined,
           isAuthor: isAuthor,
+          isAnonymous: isAnonymous,
           chatMessages: [],
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
@@ -477,7 +485,10 @@ class AppFirebaseService {
         'maxMembers': post.maxMembers,
         'currentMembers': 1,
         'authorName': post.authorName,
-        'participantNames': [post.authorName],
+        'authorUid': currentUid,
+        'participantNames': post.participantNames,
+        'participantUids': [currentUid],
+        'isAnonymous': post.isAnonymous,
         'reportCount': 0,
         'isBlinded': false,
         'reportedUserIds': [],
@@ -498,6 +509,7 @@ class AppFirebaseService {
       rethrow;
     }
   }
+
 
   Future<void> toggleJoinRidePost(String postId, String userName) async {
     try {
