@@ -314,6 +314,8 @@ class SkiResort {
 
 class ChatMessage {
   final String sender;
+  final String? senderUid;
+  final String? realSenderName;
   final String text;
   final DateTime time;
   final bool isMe;
@@ -321,6 +323,8 @@ class ChatMessage {
 
   ChatMessage({
     required this.sender,
+    this.senderUid,
+    this.realSenderName,
     required this.text,
     required this.time,
     this.isMe = false,
@@ -9085,6 +9089,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
     final newMsg = ChatMessage(
       sender: myNickname,
+      senderUid: gCurrentUser?.id,
+      realSenderName: gCurrentUser?.nickname,
       text: text,
       time: DateTime.now(),
       isMe: true,
@@ -9130,9 +9136,27 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
+  bool _isMessageFromBlockedUser(ChatMessage msg) {
+    if (msg.isMe || msg.isSystem) return false;
+    final user = gCurrentUser;
+    if (user == null) return false;
+    if (user.isUserBlocked(msg.sender)) return true;
+    if (msg.realSenderName != null && user.isUserBlocked(msg.realSenderName!)) return true;
+    if (msg.senderUid != null && user.isUserBlocked(msg.senderUid!)) return true;
+    return false;
+  }
+
   void _showBlockParticipantModal() {
     final myNickname = gCurrentUser?.nickname ?? '';
-    final otherParticipants = widget.post.participantNames.where((n) => n != myNickname).toList();
+    final otherParticipants = <String>[];
+    if (widget.post.authorName != myNickname && !otherParticipants.contains(widget.post.authorName)) {
+      otherParticipants.add(widget.post.authorName);
+    }
+    for (final p in widget.post.participantNames) {
+      if (p != myNickname && !otherParticipants.contains(p)) {
+        otherParticipants.add(p);
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -9160,7 +9184,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              const Text('차단 시 해당 사용자의 글과 후기가 숨김 처리되며, 향후 참가 시 알림이 제공됩니다.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Text('차단 시 해당 사용자의 글과 후기가 숨김 처리되며, 향후 대화 및 참가 시 알림이 제공됩니다.', style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 16),
               if (otherParticipants.isEmpty)
                 const Padding(
@@ -9180,10 +9204,30 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         leading: CircleAvatar(
-                          backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                          child: const Icon(Icons.person, color: Color(0xFF2563EB), size: 18),
+                          backgroundColor: isBlocked ? Colors.red.shade100 : const Color(0xFF2563EB).withValues(alpha: 0.1),
+                          child: Icon(
+                            isBlocked ? Icons.block_rounded : Icons.person,
+                            color: isBlocked ? Colors.red.shade700 : const Color(0xFF2563EB),
+                            size: 18,
+                          ),
                         ),
-                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        title: Row(
+                          children: [
+                            Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            if (isBlocked) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Colors.red.shade200, width: 0.8),
+                                ),
+                                child: const Text('차단됨', style: TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ],
+                        ),
                         trailing: ElevatedButton(
                           onPressed: () {
                             setState(() {
@@ -9199,7 +9243,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                backgroundColor: const Color(0xFF1E3A8A),
+                                backgroundColor: isBlocked ? const Color(0xFF1E3A8A) : Colors.red.shade800,
                                 content: Text(isBlocked ? '\'$name\' 님 차단을 해제했습니다.' : '\'$name\' 님을 차단했습니다.'),
                               ),
                             );
@@ -9443,98 +9487,123 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (widget.post.isExpired)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              color: Colors.grey.shade200,
-              child: const Row(
-                children: [
-                  Icon(Icons.lock_clock_outlined, size: 16, color: Colors.grey),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '🌙 모집 일정이 만료(익일 02:00)되어 대화방이 자동 종료되었습니다.',
-                      style: TextStyle(fontSize: 11.5, color: Colors.black87, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (needsRefill)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFFBEB),
-                border: Border(bottom: BorderSide(color: Colors.amber.shade200)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.group_outlined, size: 18, color: Color(0xFFD97706)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '참여자 1명이 퇴장했습니다 (현재 ${widget.post.currentMembers}명)',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                        ),
-                        const Text(
-                          '3명이서 타거나, 1명을 즉시 충원할 수 있습니다.',
-                          style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: _requestOneMoreMember,
-                    icon: const Icon(Icons.bolt_rounded, size: 14),
-                    label: const Text('1명 즉시 충원', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD97706),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      elevation: 0,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-              child: Row(
-                children: [
-                  const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF2563EB)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '참가 승인된 인원만 입장 가능한 대화방입니다. 만남 위치나 복장을 안전하게 조율하세요!',
-                      style: TextStyle(fontSize: 11.5, color: Colors.blue.shade900),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: widget.post.id.isNotEmpty
-                  ? AppFirebaseService.instance.streamChatMessages(widget.post.id)
-                  : const Stream.empty(),
-              builder: (context, snapshot) {
-                final displayMessages = (snapshot.hasData && snapshot.data!.isNotEmpty)
-                    ? snapshot.data!
-                    : widget.post.chatMessages;
+      body: StreamBuilder<List<ChatMessage>>(
+        stream: widget.post.id.isNotEmpty
+            ? AppFirebaseService.instance.streamChatMessages(widget.post.id)
+            : const Stream.empty(),
+        builder: (context, snapshot) {
+          final displayMessages = (snapshot.hasData && snapshot.data!.isNotEmpty)
+              ? snapshot.data!
+              : widget.post.chatMessages;
 
-                return ListView.builder(
+          final bool hasBlockedUserInRoom = displayMessages.any((m) => _isMessageFromBlockedUser(m)) ||
+              widget.post.participantNames.any((n) => gCurrentUser?.isUserBlocked(n) ?? false) ||
+              (!widget.post.isAuthor && (gCurrentUser?.isUserBlocked(widget.post.authorName) ?? false));
+
+          return Column(
+            children: [
+              if (hasBlockedUserInRoom)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    border: Border(bottom: BorderSide(color: Colors.red.shade200)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFDC2626)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '⚠️ 내가 차단한 사용자가 대화방에 참여 중입니다. 슬로프 만남 시 주의하세요.',
+                          style: TextStyle(fontSize: 11.5, color: Color(0xFFB91C1C), fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (widget.post.isExpired)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  color: Colors.grey.shade200,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.lock_clock_outlined, size: 16, color: Colors.grey),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '🌙 모집 일정이 만료(익일 02:00)되어 대화방이 자동 종료되었습니다.',
+                          style: TextStyle(fontSize: 11.5, color: Colors.black87, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (needsRefill)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    border: Border(bottom: BorderSide(color: Colors.amber.shade200)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.group_outlined, size: 18, color: Color(0xFFD97706)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '참여자 1명이 퇴장했습니다 (현재 ${widget.post.currentMembers}명)',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                            ),
+                            const Text(
+                              '3명이서 타거나, 1명을 즉시 충원할 수 있습니다.',
+                              style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _requestOneMoreMember,
+                        icon: const Icon(Icons.bolt_rounded, size: 14),
+                        label: const Text('1명 즉시 충원', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD97706),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '참가 승인된 인원만 입장 가능한 대화방입니다. 만남 위치나 복장을 안전하게 조율하세요!',
+                          style: TextStyle(fontSize: 11.5, color: Colors.blue.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
                   itemCount: displayMessages.length,
@@ -9559,6 +9628,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       );
                     }
 
+                    final bool isBlockedSender = _isMessageFromBlockedUser(msg);
+
                     return Align(
                       alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
@@ -9566,21 +9637,74 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                         decoration: BoxDecoration(
-                          color: msg.isMe ? const Color(0xFF2563EB) : Colors.grey.shade100,
+                          color: isBlockedSender
+                              ? const Color(0xFFFEF2F2)
+                              : (msg.isMe ? const Color(0xFF2563EB) : Colors.grey.shade100),
                           borderRadius: BorderRadius.circular(14),
+                          border: isBlockedSender
+                              ? Border.all(color: const Color(0xFFFCA5A5), width: 1.2)
+                              : null,
                         ),
                         child: Column(
                           crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                           children: [
                             if (!msg.isMe) ...[
-                              Text(msg.sender, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-                              const SizedBox(height: 2),
+                              if (isBlockedSender)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      msg.sender,
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFDC2626),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEE2E2),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: const Color(0xFFF87171), width: 0.8),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.block_rounded, size: 9.5, color: Color(0xFFDC2626)),
+                                          SizedBox(width: 2.5),
+                                          Text(
+                                            '차단된 사용자',
+                                            style: TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFFDC2626),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else
+                                Text(
+                                  msg.sender,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              const SizedBox(height: 3),
                             ],
                             Text(
                               msg.text,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: msg.isMe ? Colors.white : Colors.black87,
+                                color: isBlockedSender
+                                    ? const Color(0xFF991B1B)
+                                    : (msg.isMe ? Colors.white : Colors.black87),
                               ),
                             ),
                           ],
@@ -9588,10 +9712,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       ),
                     );
                   },
-                );
-              },
-            ),
-          ),
+                ),
+              ),
           widget.post.isExpired
               ? Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -9641,7 +9763,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     ),
                   ),
                 ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

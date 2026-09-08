@@ -609,11 +609,17 @@ class AppFirebaseService {
         .snapshots()
         .map((snapshot) {
       final currentUserName = gCurrentUser?.nickname ?? '';
+      final currentUserId = gCurrentUser?.id ?? '';
       return snapshot.docs.map((doc) {
         final data = doc.data();
         final sender = data['sender'] ?? '';
+        final senderUid = data['senderUid'] as String?;
+        final realSenderName = data['realSenderName'] as String?;
         final isSystem = data['isSystem'] ?? false;
-        final isMe = (sender == currentUserName) && !isSystem;
+        final isMe = (!isSystem) &&
+            ((senderUid != null && currentUserId.isNotEmpty && senderUid == currentUserId) ||
+                (sender == currentUserName) ||
+                (realSenderName != null && currentUserName.isNotEmpty && realSenderName == currentUserName));
 
         DateTime messageTime = DateTime.now();
         if (data['time'] is Timestamp) {
@@ -622,6 +628,8 @@ class AppFirebaseService {
 
         return ChatMessage(
           sender: sender,
+          senderUid: senderUid,
+          realSenderName: realSenderName,
           text: data['text'] ?? '',
           time: messageTime,
           isMe: isMe,
@@ -639,6 +647,8 @@ class AppFirebaseService {
           .collection('messages')
           .add({
         'sender': message.sender,
+        'senderUid': message.senderUid ?? gCurrentUser?.id,
+        'realSenderName': message.realSenderName ?? gCurrentUser?.nickname,
         'text': message.text,
         'time': FieldValue.serverTimestamp(),
         'isMe': false,
