@@ -368,12 +368,71 @@ class NotificationService {
         .collection('notifications')
         .snapshots()
         .listen((snapshot) {
+      final now = DateTime.now();
+
       if (_isInitialSnapshot) {
-        for (final doc in snapshot.docs) {
-          _processedNotificationDocIds.add(doc.id);
-        }
         _isInitialSnapshot = false;
-        debugPrint('🔔 [NotificationListener] 기존 과거 알림 ${_processedNotificationDocIds.length}건 캐싱 완료 (과거 알림 팝업 차단)');
+        // 🚀 앱 실행 시 최근 30분 이내에 도착한 알림이 있으면 즉시 알림 버스트 발생
+        for (final doc in snapshot.docs) {
+          final docId = doc.id;
+          if (_processedNotificationDocIds.contains(docId)) continue;
+          _processedNotificationDocIds.add(docId);
+
+          final data = doc.data();
+          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+          if (createdAt != null && now.difference(createdAt).inMinutes > 30) {
+            continue; // 30분 이상 경과한 과거 알림은 건너뜀
+          }
+
+          final sender = data['sender'] as String? ?? '';
+          final senderUid = data['senderUid'] as String? ?? '';
+          if ((myUid.isNotEmpty && senderUid == myUid) ||
+              (myNick.isNotEmpty && sender == myNick)) {
+            continue;
+          }
+
+          final targetAuthor = data['targetAuthor'] as String? ?? '';
+          final targetParticipants = (data['targetParticipants'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [targetAuthor];
+          final targetUids = (data['targetUids'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
+          final postId = data['postId'] as String? ?? '';
+
+          bool isTarget = false;
+          if (myUid.isNotEmpty && targetUids.contains(myUid)) isTarget = true;
+          if (myNick.isNotEmpty && targetParticipants.contains(myNick)) isTarget = true;
+          if (myNick.isNotEmpty && targetAuthor == myNick) isTarget = true;
+          if (postId.isNotEmpty && getJoinedPostIds != null) {
+            final joinedIds = getJoinedPostIds();
+            if (joinedIds.contains(postId)) isTarget = true;
+          }
+          if (targetParticipants.isEmpty && targetUids.isEmpty) isTarget = true;
+          if (!isTarget && postId.isNotEmpty && targetParticipants.any((p) => p.startsWith('익명의라이더'))) {
+            isTarget = true;
+          }
+
+          if (!isTarget) continue;
+
+          final title = data['title'] as String? ?? '같이타요 알림';
+          final body = data['body'] as String? ?? '';
+
+          debugPrint('🔔 [App Launch Notification Burst] 수신 알림 트리거: $title - $body');
+          try {
+            HapticFeedback.heavyImpact();
+          } catch (_) {}
+
+          final currentBadge = getUnreadBadgeCount?.call();
+          showLocalNotification(
+            title: title,
+            body: body,
+            payload: postId,
+            badgeCount: currentBadge,
+          );
+        }
         return;
       }
 
