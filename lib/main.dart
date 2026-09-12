@@ -9499,10 +9499,12 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
     }
 
     // 🔔 방장에게 동행 참가 푸시 알림 전송 (상대방 기기만 수신)
+    final authorUid = widget.post.authorUid;
     NotificationService.instance.notifyRider(
       senderNickname: myAssignedName,
       targetAuthorName: widget.post.authorName,
       targetParticipants: [widget.post.authorName],
+      targetUids: (authorUid != null && authorUid.isNotEmpty) ? [authorUid] : null,
       title: '🎉 [${widget.post.resortName.split(' ')[0]}] 동행 참가 알림',
       body: '\'$myAssignedName\' 님이 \'${widget.post.title}\' 모임에 참가했습니다!',
       type: 'ride_join',
@@ -10079,10 +10081,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
     targetParticipants.remove(myNickname);
 
+    final targetUids = List<String>.from(widget.post.participantUids);
+    if (widget.post.authorUid != null &&
+        widget.post.authorUid!.isNotEmpty &&
+        !targetUids.contains(widget.post.authorUid)) {
+      targetUids.add(widget.post.authorUid!);
+    }
+    final myUid = AppFirebaseService.instance.currentUid;
+    targetUids.remove(myUid);
+
     NotificationService.instance.notifyRider(
       senderNickname: myNickname,
       targetAuthorName: widget.post.authorName,
       targetParticipants: targetParticipants,
+      targetUids: targetUids.isNotEmpty ? targetUids : null,
       title: '💬 [${widget.post.resortName.split(' ')[0]}] 새 메시지',
       body: '$myNickname: $text',
       type: 'chat_message',
