@@ -597,48 +597,63 @@ class UserProfile {
     }
   }
 
-  bool isUserBlocked(String nicknameOrUid) {
+  bool isUserBlocked(String nicknameOrUid, {String? uid}) {
+    // 1. 내 자신은 절대 차단 대상이 아님
+    if (uid != null && uid.isNotEmpty && uid == id) return false;
+    if (id.isNotEmpty && (nicknameOrUid == id || (uid != null && uid == id))) return false;
+
+    // 2. uid가 제공된 경우 uid로 우선 검사
+    if (uid != null && uid.isNotEmpty) {
+      if (blockedUsers.any((b) => b.trim().toLowerCase() == uid.trim().toLowerCase())) {
+        return true;
+      }
+    }
+
     final trimmed = nicknameOrUid.trim();
     if (trimmed.isEmpty) return false;
+
+    // 3. 익명 닉네임 문자열("익명의라이더 A" 등)로는 절대 차단 여부를 판단하지 않음!
     final cleanInput = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
     if (cleanInput.isEmpty ||
-        cleanInput == '익명의 라이더' ||
-        cleanInput == '익명의라이더' ||
+        cleanInput.startsWith('익명의') ||
+        cleanInput.startsWith('익명') ||
         cleanInput == '시스템' ||
         cleanInput == '나' ||
-        cleanInput == '나 (방장)') {
+        cleanInput == '나 (방장)' ||
+        cleanInput == nickname.trim().toLowerCase()) {
       return false;
     }
+
     return blockedUsers.any((blocked) {
       final cleanBlocked = blocked.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
-      if (cleanBlocked.isEmpty || cleanBlocked == '익명의 라이더' || cleanBlocked == '익명의라이더') {
+      if (cleanBlocked.isEmpty || cleanBlocked.startsWith('익명의') || cleanBlocked.startsWith('익명')) {
         return false;
       }
       return cleanBlocked == cleanInput || blocked.toLowerCase() == trimmed.toLowerCase();
     });
   }
 
-  void blockUser(String nicknameOrUid) {
-    final trimmed = nicknameOrUid.trim();
-    final clean = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+  void blockUser(String uidOrNickname) {
+    final trimmed = uidOrNickname.trim();
+    final clean = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+    // 익명 별칭, 자기 자신, 시스템은 차단 목록에 등록 불가
     if (clean.isEmpty ||
-        clean == '익명의 라이더' ||
-        clean == '익명의라이더' ||
+        trimmed == id ||
+        clean.startsWith('익명의') ||
+        clean.startsWith('익명') ||
         clean == '시스템' ||
         clean == '나' ||
-        clean == '나 (방장)') {
+        clean == '나 (방장)' ||
+        clean == nickname.trim().toLowerCase()) {
       return;
     }
     if (!blockedUsers.contains(trimmed)) {
       blockedUsers.add(trimmed);
     }
-    if (clean.isNotEmpty && !blockedUsers.contains(clean)) {
-      blockedUsers.add(clean);
-    }
   }
 
-  void unblockUser(String nicknameOrUid) {
-    final trimmed = nicknameOrUid.trim().toLowerCase();
+  void unblockUser(String uidOrNickname) {
+    final trimmed = uidOrNickname.trim().toLowerCase();
     final clean = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
     blockedUsers.removeWhere((b) {
       final cleanB = b.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
@@ -686,7 +701,17 @@ class UserProfile {
       taggedReviewsCount: json['taggedReviewsCount'] ?? 0,
       snowPoints: json['snowPoints'] ?? 0,
       riderTitle: json['riderTitle'] ?? '비기너 라이더 🏂',
-      blockedUsers: List<String>.from(json['blockedUsers'] ?? []),
+      blockedUsers: (List<String>.from(json['blockedUsers'] ?? []))
+          .where((b) {
+            final lower = b.trim().toLowerCase();
+            return lower.isNotEmpty &&
+                !lower.startsWith('익명의') &&
+                !lower.startsWith('익명') &&
+                lower != '시스템' &&
+                lower != '나' &&
+                lower != '나 (방장)';
+          })
+          .toList(),
       eventNotification: json['eventNotification'] ?? true,
       eventConsentDate: json['eventConsentDate'] != null
           ? DateTime.tryParse(json['eventConsentDate'])
@@ -1710,7 +1735,13 @@ class _HomeScreenState extends State<HomeScreen> {
         final recentPosts = currentPosts.where((post) {
           if (post.purpose.contains('랜덤')) return false;
           if (post.shouldHide) return false;
-          if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
+          // 내 글은 절대 차단되지 않음
+          if (post.isAuthor || (gCurrentUser != null && post.authorUid == gCurrentUser!.id)) return true;
+          if (post.authorUid != null && post.authorUid!.isNotEmpty &&
+              (gCurrentUser?.isUserBlocked(post.authorUid!, uid: post.authorUid) ?? false)) {
+            return false;
+          }
+          if (!post.isAnonymous && (gCurrentUser?.isUserBlocked(post.authorName) ?? false)) {
             return false;
           }
           return true;
@@ -2916,7 +2947,17 @@ class _RidePostListViewState extends State<RidePostListView> {
     return gRidePosts.where((post) {
       if (post.purpose.contains('랜덤')) return false;
       if (post.shouldHide) return false;
-      if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) return false;
+      if (post.isAuthor || (gCurrentUser != null && post.authorUid == gCurrentUser!.id)) {
+        // 내 글은 항상 카운트
+      } else {
+        if (post.authorUid != null && post.authorUid!.isNotEmpty &&
+            (gCurrentUser?.isUserBlocked(post.authorUid!, uid: post.authorUid) ?? false)) {
+          return false;
+        }
+        if (!post.isAnonymous && (gCurrentUser?.isUserBlocked(post.authorName) ?? false)) {
+          return false;
+        }
+      }
       if (resortShortName == '전체') return true;
       return post.resortName.contains(resortShortName);
     }).length;
@@ -2925,7 +2966,8 @@ class _RidePostListViewState extends State<RidePostListView> {
   List<RidePost> get _myJoinedPosts =>
       gRidePosts.where((p) => p.canAccessChat).toList();
 
-  void _showBlockUserDialog(String nickname) {
+  void _showBlockUserDialog(String nickname, {String? targetUid}) {
+    final blockTarget = (targetUid != null && targetUid.isNotEmpty) ? targetUid : nickname;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -2941,7 +2983,7 @@ class _RidePostListViewState extends State<RidePostListView> {
             onPressed: () {
               setState(() {
                 if (gCurrentUser != null) {
-                  gCurrentUser!.blockUser(nickname);
+                  gCurrentUser!.blockUser(blockTarget);
                   AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
                 }
               });
@@ -3541,8 +3583,16 @@ class _RidePostListViewState extends State<RidePostListView> {
         final visiblePosts = currentPosts.where((post) {
           if (post.purpose.contains('랜덤')) return false; // 🚫 4인 랜덤매칭 대화방은 일반 모집글 피드에서 제외
           if (post.shouldHide) return false;
-          if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
-            return false;
+          if (post.isAuthor || (gCurrentUser != null && post.authorUid == gCurrentUser!.id)) {
+            // 내 글은 항상 표시
+          } else {
+            if (post.authorUid != null && post.authorUid!.isNotEmpty &&
+                (gCurrentUser?.isUserBlocked(post.authorUid!, uid: post.authorUid) ?? false)) {
+              return false;
+            }
+            if (!post.isAnonymous && (gCurrentUser?.isUserBlocked(post.authorName) ?? false)) {
+              return false;
+            }
           }
 
           // 1. 스키장(베이스) 필터
@@ -3794,7 +3844,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                       ],
                       onSelected: (val) {
                         if (val == 'block') {
-                          _showBlockUserDialog(post.authorName);
+                          _showBlockUserDialog(post.authorName, targetUid: post.authorUid);
                         } else if (val == 'report') {
                           final currentUserId = gCurrentUser?.id ?? 'me';
                           if (post.reportedUserIds.contains(currentUserId)) {
@@ -4660,7 +4710,8 @@ class RideReviewListView extends StatefulWidget {
 class _RideReviewListViewState extends State<RideReviewListView> {
   String _selectedResort = '전체';
 
-  void _showBlockUserDialog(String nickname) {
+  void _showBlockUserDialog(String nickname, {String? targetUid}) {
+    final blockTarget = (targetUid != null && targetUid.isNotEmpty) ? targetUid : nickname;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -4676,7 +4727,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
             onPressed: () {
               setState(() {
                 if (gCurrentUser != null) {
-                  gCurrentUser!.blockUser(nickname);
+                  gCurrentUser!.blockUser(blockTarget);
                   AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
                 }
               });
@@ -4704,6 +4755,12 @@ class _RideReviewListViewState extends State<RideReviewListView> {
   Widget build(BuildContext context) {
     final unblockedReviews = gRideReviews.where((r) {
       if (r.shouldHide) return false;
+      // 내 리뷰는 항상 표시
+      if (r.isAuthor || (gCurrentUser != null && r.authorUid == gCurrentUser!.id)) return true;
+      if (r.authorUid != null && r.authorUid!.isNotEmpty &&
+          (gCurrentUser?.isUserBlocked(r.authorUid!, uid: r.authorUid) ?? false)) {
+        return false;
+      }
       if (gCurrentUser?.isUserBlocked(r.authorName) ?? false) return false;
       return true;
     }).toList();
@@ -4944,7 +5001,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                   ],
                   onSelected: (val) {
                     if (val == 'block') {
-                      _showBlockUserDialog(review.authorName);
+                      _showBlockUserDialog(review.authorName, targetUid: review.authorUid);
                     } else if (val == 'report') {
                       final currentUserId = gCurrentUser?.id ?? 'me';
                       if (review.reportedUserIds.contains(currentUserId)) {
@@ -9535,7 +9592,10 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
           ElevatedButton(
             onPressed: () {
               if (gCurrentUser != null) {
-                gCurrentUser!.blockUser(widget.post.authorName);
+                final target = (widget.post.authorUid != null && widget.post.authorUid!.isNotEmpty)
+                    ? widget.post.authorUid!
+                    : widget.post.authorName;
+                gCurrentUser!.blockUser(target);
                 AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
               }
               Navigator.pop(context);
@@ -10120,13 +10180,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (user == null) return false;
     if (msg.senderUid != null && msg.senderUid == user.id) return false;
     if (msg.realSenderName != null && msg.realSenderName == user.nickname) return false;
-    if (msg.senderUid != null && user.isUserBlocked(msg.senderUid!)) return true;
-    if (msg.realSenderName != null && user.isUserBlocked(msg.realSenderName!)) return true;
-    if (user.isUserBlocked(msg.sender)) return true;
+    if (msg.senderUid != null && msg.senderUid!.isNotEmpty) {
+      if (user.isUserBlocked(msg.senderUid!, uid: msg.senderUid)) return true;
+    }
+    if (msg.realSenderName != null && msg.realSenderName!.isNotEmpty) {
+      if (user.isUserBlocked(msg.realSenderName!)) return true;
+    }
+    if (!msg.sender.startsWith('익명의') && !msg.sender.startsWith('익명')) {
+      if (user.isUserBlocked(msg.sender)) return true;
+    }
     return false;
   }
 
   void _showBlockParticipantModal() {
+    final myUid = gCurrentUser?.id ?? '';
     final String myAssignedName;
     if (widget.post.isAnonymous) {
       if (widget.post.isAuthor) {
@@ -10142,25 +10209,32 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
     final myRealName = gCurrentUser?.nickname ?? '';
 
-    final otherParticipants = <String>[];
+    final otherParticipants = <Map<String, String>>[];
     if (!widget.post.isAuthor &&
         widget.post.authorName.isNotEmpty &&
         widget.post.authorName != myAssignedName &&
         widget.post.authorName != myRealName &&
-        !widget.post.authorName.contains('방장')) {
-      otherParticipants.add(widget.post.authorName);
-    } else if (!widget.post.isAuthor && widget.post.authorName.isNotEmpty && widget.post.authorName != myAssignedName && widget.post.authorName != myRealName) {
-      otherParticipants.add(widget.post.authorName);
+        (widget.post.authorUid == null || widget.post.authorUid != myUid)) {
+      otherParticipants.add({
+        'name': widget.post.authorName,
+        'uid': widget.post.authorUid ?? '',
+      });
     }
 
-    for (final p in widget.post.participantNames) {
+    for (int i = 0; i < widget.post.participantNames.length; i++) {
+      final p = widget.post.participantNames[i];
+      final pUid = (i < widget.post.participantUids.length) ? widget.post.participantUids[i] : '';
       if (p.isNotEmpty &&
           p != myAssignedName &&
           p != myRealName &&
           p != '나' &&
           p != '나 (방장)' &&
-          !otherParticipants.contains(p)) {
-        otherParticipants.add(p);
+          (pUid.isEmpty || pUid != myUid) &&
+          !otherParticipants.any((item) => item['name'] == p && item['uid'] == pUid)) {
+        otherParticipants.add({
+          'name': p,
+          'uid': pUid,
+        });
       }
     }
 
@@ -10204,8 +10278,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     itemCount: otherParticipants.length,
                     separatorBuilder: (context, index) => const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final name = otherParticipants[index];
-                      final isBlocked = gCurrentUser?.isUserBlocked(name) ?? false;
+                      final item = otherParticipants[index];
+                      final name = item['name'] ?? '';
+                      final targetUid = item['uid'] ?? '';
+                      final isBlocked = (targetUid.isNotEmpty)
+                          ? (gCurrentUser?.isUserBlocked(targetUid, uid: targetUid) ?? false)
+                          : (gCurrentUser?.isUserBlocked(name) ?? false);
 
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -10236,11 +10314,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         ),
                         trailing: ElevatedButton(
                           onPressed: () {
+                            final blockTarget = targetUid.isNotEmpty ? targetUid : name;
                             setState(() {
                               if (isBlocked) {
-                                gCurrentUser?.unblockUser(name);
+                                gCurrentUser?.unblockUser(blockTarget);
                               } else {
-                                gCurrentUser?.blockUser(name);
+                                gCurrentUser?.blockUser(blockTarget);
                               }
                               if (gCurrentUser != null) {
                                 AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
@@ -10559,9 +10638,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               ? snapshot.data!
               : widget.post.chatMessages;
 
+          final myUid = gCurrentUser?.id ?? '';
           final bool hasBlockedUserInRoom = displayMessages.any((m) => _isMessageFromBlockedUser(m)) ||
-              widget.post.participantNames.any((n) => gCurrentUser?.isUserBlocked(n) ?? false) ||
-              (!widget.post.isAuthor && (gCurrentUser?.isUserBlocked(widget.post.authorName) ?? false));
+              widget.post.participantUids.any((uid) => uid.isNotEmpty && uid != myUid && (gCurrentUser?.isUserBlocked(uid, uid: uid) ?? false)) ||
+              (!widget.post.isAuthor && widget.post.authorUid != null && widget.post.authorUid!.isNotEmpty && widget.post.authorUid != myUid && (gCurrentUser?.isUserBlocked(widget.post.authorUid!, uid: widget.post.authorUid) ?? false));
 
           return Column(
             children: [

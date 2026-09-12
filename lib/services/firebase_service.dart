@@ -277,7 +277,9 @@ class AppFirebaseService {
           taggedReviewsCount: data['taggedReviewsCount'] ?? 0,
           snowPoints: data['snowPoints'] ?? 0,
           riderTitle: data['riderTitle'] ?? '비기너 라이더 🏂',
-          blockedUsers: List<String>.from(data['blockedUsers'] ?? []),
+          blockedUsers: (List<String>.from(data['blockedUsers'] ?? []))
+              .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
+              .toList(),
           eventNotification: data['eventNotification'] ?? true,
           eventConsentDate: (data['eventConsentDate'] is Timestamp)
               ? (data['eventConsentDate'] as Timestamp).toDate()
@@ -311,7 +313,9 @@ class AppFirebaseService {
           gCurrentUser!.snowPoints = data['snowPoints'] ?? gCurrentUser!.snowPoints;
           gCurrentUser!.completedRidesCount = data['completedRidesCount'] ?? gCurrentUser!.completedRidesCount;
           gCurrentUser!.taggedReviewsCount = data['taggedReviewsCount'] ?? gCurrentUser!.taggedReviewsCount;
-          gCurrentUser!.blockedUsers = List<String>.from(data['blockedUsers'] ?? gCurrentUser!.blockedUsers);
+          gCurrentUser!.blockedUsers = (List<String>.from(data['blockedUsers'] ?? gCurrentUser!.blockedUsers))
+              .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
+              .toList();
           // 로컬 캐시도 갱신
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('saved_user_profile_json', jsonEncode(gCurrentUser!.toJson()));
