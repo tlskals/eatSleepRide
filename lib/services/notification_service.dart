@@ -277,6 +277,15 @@ class NotificationService {
     String? payload,
     int? badgeCount,
   }) async {
+    // 🛡️ 2초 이내 동일 알림 중복 노출 및 다중 진동 방지
+    final dedupeKey = '$title:$body:$payload';
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_recentShownKeys.containsKey(dedupeKey) &&
+        (nowMs - _recentShownKeys[dedupeKey]!) < 2500) {
+      return;
+    }
+    _recentShownKeys[dedupeKey] = nowMs;
+
     const androidDetails = AndroidNotificationDetails(
       'eatsleepride_high_channel',
       '같이타요 실시간 알림',
@@ -302,12 +311,12 @@ class NotificationService {
       iOS: darwinDetails,
     );
 
-    // 📳 실기기 햅틱 진동 발생
+    // 📳 깔끔하고 부드러운 단일 햅틱 진동 발생
     try {
-      HapticFeedback.heavyImpact();
+      HapticFeedback.lightImpact();
     } catch (_) {}
 
-    final id = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final id = (title.hashCode ^ body.hashCode) & 0x7FFFFFFF;
     await _localNotifications.show(
       id,
       title,
@@ -344,6 +353,7 @@ class NotificationService {
   }
 
   final Set<String> _processedNotificationDocIds = {};
+  final Map<String, int> _recentShownKeys = {};
   bool _isInitialSnapshot = true;
   StreamSubscription<QuerySnapshot>? _realtimeNotificationSub;
   Function(String postId, String title, String body)? onChatMessageReceived;
@@ -371,70 +381,11 @@ class NotificationService {
         .collection('notifications')
         .snapshots()
         .listen((snapshot) {
-      final now = DateTime.now();
-
       if (_isInitialSnapshot) {
         _isInitialSnapshot = false;
-        // 🚀 앱 실행 시 최근 30분 이내에 도착한 알림이 있으면 즉시 알림 버스트 발생
+        // 🚀 초기 로드 시 기존 과거 알림들은 처리 완료로 마킹만 하고 알림 팝업/진동 버스트는 발생시키지 않음
         for (final doc in snapshot.docs) {
-          final docId = doc.id;
-          if (_processedNotificationDocIds.contains(docId)) continue;
-          _processedNotificationDocIds.add(docId);
-
-          final data = doc.data();
-          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-          if (createdAt != null && now.difference(createdAt).inMinutes > 30) {
-            continue; // 30분 이상 경과한 과거 알림은 건너뜀
-          }
-
-          final sender = data['sender'] as String? ?? '';
-          final senderUid = data['senderUid'] as String? ?? '';
-          if ((myUid.isNotEmpty && senderUid == myUid) ||
-              (myNick.isNotEmpty && sender == myNick)) {
-            continue;
-          }
-
-          final targetAuthor = data['targetAuthor'] as String? ?? '';
-          final targetParticipants = (data['targetParticipants'] as List<dynamic>?)
-                  ?.map((e) => e.toString())
-                  .toList() ??
-              [targetAuthor];
-          final targetUids = (data['targetUids'] as List<dynamic>?)
-                  ?.map((e) => e.toString())
-                  .toList() ??
-              [];
-          final postId = data['postId'] as String? ?? '';
-
-          bool isTarget = false;
-          if (myUid.isNotEmpty && targetUids.contains(myUid)) isTarget = true;
-          if (myNick.isNotEmpty && targetParticipants.contains(myNick)) isTarget = true;
-          if (myNick.isNotEmpty && targetAuthor == myNick) isTarget = true;
-          if (postId.isNotEmpty && getJoinedPostIds != null) {
-            final joinedIds = getJoinedPostIds();
-            if (joinedIds.contains(postId)) isTarget = true;
-          }
-          if (targetParticipants.isEmpty && targetUids.isEmpty) isTarget = true;
-          if (!isTarget && postId.isNotEmpty && targetParticipants.any((p) => p.startsWith('익명의라이더'))) {
-            isTarget = true;
-          }
-
-          if (!isTarget) continue;
-
-          final title = data['title'] as String? ?? '같이타요 알림';
-          final body = data['body'] as String? ?? '';
-
-          debugPrint('🔔 [App Launch Notification Burst] 수신 알림 트리거: $title - $body');
-          try {
-            HapticFeedback.heavyImpact();
-          } catch (_) {}
-
-          final currentBadge = getUnreadBadgeCount?.call();
-          showLocalNotification(
-            title: title,
-            body: body,
-            payload: postId,
-            badgeCount: currentBadge,
-          );
+          _processedNotificationDocIds.add(doc.id);
         }
         return;
       }
@@ -490,12 +441,16 @@ class NotificationService {
           final title = data['title'] as String? ?? '같이타요 알림';
           final body = data['body'] as String? ?? '';
 
+          // 중복 발송 방지 (3초 이내 동일 알림 중복 무시)
+          final dedupeKey = '$title:$body:$postId';
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (_recentShownKeys.containsKey(dedupeKey) &&
+              (nowMs - _recentShownKeys[dedupeKey]!) < 3000) {
+            continue;
+          }
+          _recentShownKeys[dedupeKey] = nowMs;
+
           debugPrint('🔔 [Cross-Device Notification] 수신 알림 트리거: $title - $body');
-          
-          try {
-            HapticFeedback.heavyImpact();
-            HapticFeedback.vibrate();
-          } catch (_) {}
 
           final currentBadge = getUnreadBadgeCount?.call();
           showLocalNotification(
