@@ -28,7 +28,25 @@ exports.sendPushOnNotification = onDocumentCreated(
 
     console.log(`[Push Trigger] 알림 수신: title="${title}", body="${body}", senderUid="${senderUid}", targetUids=${JSON.stringify(targetUids)}`);
 
-    // 수신자 UID 목록이 비어있고 닉네임 목록(targetParticipants)만 있는 경우 UID 역조회
+    // 수신자 UID 목록이 비어있는 경우 (1) postId가 있으면 gatherings 문서에서 참가자/방장 UID 직접 조회
+    if (targetUids.length === 0 && postId) {
+      try {
+        const gatheringDoc = await db.collection("gatherings").doc(postId).get();
+        if (gatheringDoc.exists) {
+          const gData = gatheringDoc.data();
+          const pUids = Array.isArray(gData?.participantUids) ? gData.participantUids : [];
+          const aUid = gData?.authorUid || "";
+          for (const uid of pUids) {
+            if (uid && !targetUids.includes(uid)) targetUids.push(uid);
+          }
+          if (aUid && !targetUids.includes(aUid)) targetUids.push(aUid);
+        }
+      } catch (err) {
+        console.error("[Push Trigger] gatherings 조회 실패:", err);
+      }
+    }
+
+    // (2) 닉네임 목록(targetParticipants)이 있는 경우 유저 닉네임으로 역조회
     if (targetUids.length === 0) {
       const targetParticipants = Array.isArray(data.targetParticipants)
         ? data.targetParticipants
