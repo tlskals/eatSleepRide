@@ -15,14 +15,16 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    // 🚀 유저 프로필 자동 로그인 세션 복원 및 초기화 (반드시 완료 후 앱 렌더링)
-    await AppFirebaseService.instance.initUserAuthAndProfile();
-    // 🔔 푸시 알림 및 로컬 알림 서비스 초기화 (권한 요청 및 토큰 등록)
-    await NotificationService.instance.initialize();
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
+
+  // 🚀 앱 UI를 먼저 즉시 띄워 아이폰 실기기 스플래시 화면 멈춤 현상 원천 차단
   runApp(const MyApp());
+
+  // 백그라운드에서 유저 세션 복원 및 푸시 알림 비동기 초기화 (블로킹 방지)
+  unawaited(AppFirebaseService.instance.initUserAuthAndProfile());
+  unawaited(NotificationService.instance.initialize());
 }
 
 class MyApp extends StatelessWidget {
@@ -1681,6 +1683,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final Map<String, ResortWeather> _weathers = {};
+  SkiResort _selectedSnowResort = kSkiResorts.first;
 
   @override
   void initState() {
@@ -1779,6 +1782,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // -------------------------------------------------------
+                  // 0. ❄️ 실시간 설질 • LIVE 피드 카드
+                  // -------------------------------------------------------
+                  _buildLiveSnowConditionCard(),
+
+                  const SizedBox(height: 20),
+
+                  // -------------------------------------------------------
                   // 1. ⚡️ 초고속 4인 랜덤 매칭 실시간 현황 & 원터치 진입 카드
                   // -------------------------------------------------------
                   _buildRandomMatchingLiveCard(),
@@ -1811,6 +1821,439 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
+    );
+  }
+
+  // -------------------------------------------------------------
+  // 위젯 0: ❄️ 실시간 설질 • LIVE 피드 카드
+  // -------------------------------------------------------------
+  Widget _buildLiveSnowConditionCard() {
+    final weather = _weathers[_selectedSnowResort.id];
+    final bool hasEarnedToday = gCurrentUser?.hasEarnedSnowPointToday ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. 상단 헤더 (실시간 설질 배지 + LIVE + 한줄평 작성 버튼)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.ac_unit_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          '실시간 설질',
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFCA5A5), width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        const Text(
+                          '• LIVE',
+                          style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  foregroundColor: const Color(0xFF2563EB),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _showWriteLiveSnowCommentDialog,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.edit_note_rounded, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      hasEarnedToday ? '한줄평 작성 (완료)' : '한줄평 작성',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // 2. 스키장 수평 선택 칩 목록
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: kSkiResorts.map((resort) {
+                final isSelected = _selectedSnowResort.id == resort.id;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      setState(() {
+                        _selectedSnowResort = resort;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        resort.shortName,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 3. 선택된 스키장 정보 바 (날씨 + 스키장 정보 링크)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_selectedSnowResort.name} (${_selectedSnowResort.region}) ${weather != null ? '${weather.iconEmoji} ${weather.temp > 0 ? '+' : ''}${weather.temp.toStringAsFixed(1)}°C (${weather.weatherDesc})' : '❄️'}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  onTap: () => widget.onNavigateToTab(2),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '스키장 정보',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold),
+                      ),
+                      Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF2563EB)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 4. 실시간 한줄평 피드 스트림 목록
+          StreamBuilder<List<LiveSnowComment>>(
+            stream: AppFirebaseService.instance.streamLiveSnowComments(resortId: _selectedSnowResort.id),
+            builder: (context, snapshot) {
+              final comments = snapshot.data ?? [];
+
+              if (comments.isEmpty) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.ac_unit_rounded, size: 26, color: Colors.blue.shade300),
+                      const SizedBox(height: 6),
+                      Text(
+                        '아직 오늘 등록된 ${_selectedSnowResort.shortName}의 실시간 설질 한줄평이 없습니다.\n첫 한줄평을 남기고 50P를 획득해보세요! ❄️',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.4),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final displayed = comments.take(3).toList();
+
+              return Column(
+                children: displayed.map((comment) {
+                  final diff = DateTime.now().difference(comment.createdAt);
+                  final timeAgo = diff.inMinutes < 1
+                      ? '방금 전'
+                      : diff.inMinutes < 60
+                          ? '${diff.inMinutes}분 전'
+                          : diff.inHours < 24
+                              ? '${diff.inHours}시간 전'
+                              : '${diff.inDays}일 전';
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                              ),
+                              child: Text(
+                                '${comment.snowConditionEmoji} ${comment.snowCondition}',
+                                style: const TextStyle(fontSize: 10.5, color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              comment.authorName,
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black87),
+                            ),
+                            const Spacer(),
+                            Text(
+                              timeAgo,
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          comment.content,
+                          style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showWriteLiveSnowCommentDialog() {
+    if (!ensureUserLoggedIn(context, actionName: '설질 한줄평을 작성')) return;
+
+    final controller = TextEditingController();
+    String selectedCondition = '양호/양설';
+    String selectedEmoji = '✨';
+
+    final conditions = [
+      {'label': '양호/양설', 'emoji': '✨'},
+      {'label': '강설/아이스', 'emoji': '🧊'},
+      {'label': '습설/파우더', 'emoji': '❄️'},
+      {'label': '슬러시/봄눈', 'emoji': '☀️'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                const Icon(Icons.ac_unit_rounded, color: Color(0xFF2563EB), size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  '${_selectedSnowResort.shortName} 설질 한줄평',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.bolt_rounded, size: 16, color: Color(0xFFD97706)),
+                        SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '설질 한줄평 등록 시 50P가 즉시 적립됩니다! ⚡',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('설질 상태 선택', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: conditions.map((item) {
+                      final isSel = selectedCondition == item['label'];
+                      return ChoiceChip(
+                        label: Text('${item['emoji']} ${item['label']}'),
+                        selected: isSel,
+                        selectedColor: const Color(0xFF2563EB),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          color: isSel ? Colors.white : Colors.black87,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (val) {
+                          if (val) {
+                            setDialogState(() {
+                              selectedCondition = item['label']!;
+                              selectedEmoji = item['emoji']!;
+                            });
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('한줄평 내용', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: controller,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: '오늘의 ${_selectedSnowResort.shortName} 설질을 한 줄로 공유해주세요 (예: 아이스 살짝 있으나 탈만함)',
+                      hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('취소', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final text = controller.text.trim();
+                  if (text.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('한줄평 내용을 입력해주세요.')),
+                    );
+                    return;
+                  }
+
+                  final newComment = LiveSnowComment(
+                    id: '',
+                    resortId: _selectedSnowResort.id,
+                    resortName: _selectedSnowResort.name,
+                    authorName: gCurrentUser?.nickname ?? '익명의 라이더',
+                    authorUid: gCurrentUser?.id,
+                    content: text,
+                    snowCondition: selectedCondition,
+                    snowConditionEmoji: selectedEmoji,
+                    createdAt: DateTime.now(),
+                  );
+
+                  final messenger = ScaffoldMessenger.of(context);
+                  Navigator.pop(dialogCtx);
+                  await AppFirebaseService.instance.addLiveSnowComment(newComment);
+
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      backgroundColor: const Color(0xFF1E3A8A),
+                      content: Row(
+                        children: [
+                          const Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text('🎉 [${_selectedSnowResort.shortName}] 설질 한줄평이 등록되고 50P가 적립되었습니다!'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('50P 받고 등록'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 

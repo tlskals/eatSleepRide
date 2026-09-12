@@ -161,22 +161,25 @@ class NotificationService {
         onNotificationTap?.call(message.data['postId'] ?? message.data['type']);
       });
 
-      // 9. 앱 종료 상태에서 알림 클릭으로 최초 실행되었을 때
-      final initialMessage = await _fcm.getInitialMessage();
-      if (initialMessage != null) {
-        debugPrint('🔔 [FCM InitialMessage] 앱 실행: ${initialMessage.data}');
-        onNotificationTap?.call(initialMessage.data['postId'] ?? initialMessage.data['type']);
-      }
+      // 9. 앱 종료 상태에서 알림 클릭으로 최초 실행되었을 때 & 10. 전체 공지 토픽 구독 (비동기 처리로 스플래시 지연 방지)
+      unawaited(() async {
+        try {
+          final initialMessage = await _fcm.getInitialMessage().timeout(const Duration(seconds: 3));
+          if (initialMessage != null) {
+            debugPrint('🔔 [FCM InitialMessage] 앱 실행: ${initialMessage.data}');
+            onNotificationTap?.call(initialMessage.data['postId'] ?? initialMessage.data['type']);
+          }
+        } catch (_) {}
 
-      // 10. 전체 공지 및 이벤트 기본 토픽 구독
-      try {
-        await _fcm.subscribeToTopic('all_users');
-        debugPrint('🔔 [FCM Topic] \'all_users\' 토픽 구독 완료');
-        await _fcm.subscribeToTopic('events');
-        debugPrint('🔔 [FCM Topic] \'events\' 이벤트 토픽 구독 완료');
-      } catch (e) {
-        debugPrint('🔔 [FCM Topic Init Error]: $e');
-      }
+        try {
+          await _fcm.subscribeToTopic('all_users').timeout(const Duration(seconds: 3));
+          debugPrint('🔔 [FCM Topic] \'all_users\' 토픽 구독 완료');
+          await _fcm.subscribeToTopic('events').timeout(const Duration(seconds: 3));
+          debugPrint('🔔 [FCM Topic] \'events\' 이벤트 토픽 구독 완료');
+        } catch (e) {
+          debugPrint('🔔 [FCM Topic Init Error]: $e');
+        }
+      }());
 
       _isInitialized = true;
     } catch (e) {
