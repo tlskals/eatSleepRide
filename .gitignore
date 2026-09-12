@@ -59,3 +59,12 @@ app.*.map.json
 **/macos/Flutter/ephemeral/
 **/macos/Runner/GeneratedPluginRegistrant.*
 
+# Cloud Functions & Node
+**/node_modules/
+functions/node_modules/
+
+# Large test media
+*.mov
+*.mp4
+*.m4v
+test.mov

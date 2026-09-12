@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -24,6 +26,13 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -41,18 +50,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>설질 후기 및 슬로프 인증 사진을 업로드하기 위해 갤러리 접근 권한이 필요합니다.</string>
+	<string>프로필 사진 설정 및 슬로프 후기 사진 첨부를 위해 사진 보관함 접근 권한이 필요합니다.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>실시간 설질 사진을 직접 촬영하여 등록하기 위해 카메라 접근 권한이 필요합니다.</string>
+	<string>슬로프 현장 사진 촬영 및 후기 작성을 위해 카메라 접근 권한이 필요합니다.</string>
 </dict>
 </plist>

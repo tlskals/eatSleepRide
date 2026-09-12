@@ -15,12 +15,10 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    // 🚀 파이어베이스 익명 인증 및 유저 프로필 초기화 + 데이터 시딩
-    AppFirebaseService.instance.initUserAuthAndProfile().then((_) {
-      AppFirebaseService.instance.seedInitialDataIfEmpty(gRidePosts, gRideReviews);
-    });
+    // 🚀 유저 프로필 자동 로그인 세션 복원 및 초기화 (반드시 완료 후 앱 렌더링)
+    await AppFirebaseService.instance.initUserAuthAndProfile();
     // 🔔 푸시 알림 및 로컬 알림 서비스 초기화 (권한 요청 및 토큰 등록)
-    NotificationService.instance.initialize();
+    await NotificationService.instance.initialize();
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
@@ -49,6 +47,8 @@ class MyApp extends StatelessWidget {
 // -------------------------------------------------------------
 // 데이터 모델
 // -------------------------------------------------------------
+
+final ValueNotifier<int> gUnreadChatCountNotifier = ValueNotifier<int>(0);
 
 class SkiWebcam {
   final String name;
@@ -334,6 +334,7 @@ class ChatMessage {
 
 class RidePost {
   final String id;
+  final String? authorUid;
   final String title;
   final String content;
   final String resortName;
@@ -348,6 +349,8 @@ class RidePost {
   int currentMembers;
   final String authorName;
   List<String> participantNames;
+  List<String> participantUids;
+  bool hasMemberLeft;
   bool isJoined;
   bool isAuthor;
   final List<ChatMessage> chatMessages;
@@ -365,6 +368,7 @@ class RidePost {
 
   RidePost({
     required this.id,
+    this.authorUid,
     required this.title,
     required this.content,
     required this.resortName,
@@ -379,6 +383,8 @@ class RidePost {
     this.currentMembers = 1,
     required this.authorName,
     List<String>? participantNames,
+    List<String>? participantUids,
+    this.hasMemberLeft = false,
     this.isJoined = false,
     this.isAuthor = false,
     required this.chatMessages,
@@ -391,6 +397,7 @@ class RidePost {
     this.isAnonymous = true,
   })  : createdAt = createdAt ?? DateTime.now(),
         participantNames = participantNames ?? [authorName],
+        participantUids = participantUids ?? (authorUid != null ? [authorUid] : []),
         reportedUserIds = reportedUserIds ?? [];
 
   static const List<String> kAnonymousLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -472,6 +479,15 @@ class UserProfile {
   List<String> blockedUsers; // 차단한 사용자 닉네임 목록
   bool eventNotification; // 🎁 시즌 이벤트 및 혜택 알림 수신 동의 여부 (정보통신망법)
   DateTime? eventConsentDate; // 수신 동의/변경 일시
+  DateTime? lastSnowPointDate;
+
+  bool get hasEarnedSnowPointToday {
+    if (lastSnowPointDate == null) return false;
+    final now = DateTime.now();
+    return lastSnowPointDate!.year == now.year &&
+        lastSnowPointDate!.month == now.month &&
+        lastSnowPointDate!.day == now.day;
+  }
 
   UserProfile({
     required this.id,
@@ -482,38 +498,36 @@ class UserProfile {
     this.homeResort = '비발디파크',
     this.level = '중급',
     required this.joinedAt,
-    this.completedRidesCount = 7,
-    this.taggedReviewsCount = 4,
-    this.snowPoints = 1450,
-    this.riderTitle = '골드 라이더 🏂',
+    this.completedRidesCount = 0,
+    this.taggedReviewsCount = 0,
+    this.snowPoints = 0,
+    this.riderTitle = '비기너 라이더 🏂',
     List<RiderBadge>? badges,
     List<String>? blockedUsers,
     this.eventNotification = true,
     this.eventConsentDate,
+    this.lastSnowPointDate,
   })  : badges = badges ?? [
           const RiderBadge(
             id: 'first_ride',
             title: '첫 동행 성사',
             emoji: '⛷️',
             description: '첫 같이타요 슬로프 동행을 마쳤어요',
-            isUnlocked: true,
-            unlockedDate: '2026.01.18',
+            isUnlocked: false,
           ),
           const RiderBadge(
             id: 'random_master',
             title: '4인 매칭 마스터',
             emoji: '⚡️',
             description: '4인 랜덤 매칭을 3회 이상 완료했어요',
-            isUnlocked: true,
-            unlockedDate: '2026.02.04',
+            isUnlocked: false,
           ),
           const RiderBadge(
             id: 'night_rider',
             title: '야간 라이더',
             emoji: '🌙',
             description: '야간/심야 슬로프 동행을 완료했어요',
-            isUnlocked: true,
-            unlockedDate: '2026.02.20',
+            isUnlocked: false,
           ),
           const RiderBadge(
             id: 'manner_king',
@@ -577,49 +591,114 @@ class UserProfile {
     }
   }
 
-  bool isUserBlocked(String nickname) {
-    if (nickname.isEmpty) return false;
-    final cleanInput = nickname.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+  bool isUserBlocked(String nicknameOrUid) {
+    final trimmed = nicknameOrUid.trim();
+    if (trimmed.isEmpty) return false;
+    final cleanInput = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+    if (cleanInput.isEmpty ||
+        cleanInput == '익명의 라이더' ||
+        cleanInput == '익명의라이더' ||
+        cleanInput == '시스템' ||
+        cleanInput == '나' ||
+        cleanInput == '나 (방장)') {
+      return false;
+    }
     return blockedUsers.any((blocked) {
       final cleanBlocked = blocked.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
-      return cleanBlocked == cleanInput || blocked.toLowerCase() == nickname.toLowerCase();
+      if (cleanBlocked.isEmpty || cleanBlocked == '익명의 라이더' || cleanBlocked == '익명의라이더') {
+        return false;
+      }
+      return cleanBlocked == cleanInput || blocked.toLowerCase() == trimmed.toLowerCase();
     });
   }
 
-  void blockUser(String nickname) {
-    final clean = nickname.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
-    if (!blockedUsers.contains(nickname)) {
-      blockedUsers.add(nickname);
+  void blockUser(String nicknameOrUid) {
+    final trimmed = nicknameOrUid.trim();
+    final clean = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+    if (clean.isEmpty ||
+        clean == '익명의 라이더' ||
+        clean == '익명의라이더' ||
+        clean == '시스템' ||
+        clean == '나' ||
+        clean == '나 (방장)') {
+      return;
+    }
+    if (!blockedUsers.contains(trimmed)) {
+      blockedUsers.add(trimmed);
     }
     if (clean.isNotEmpty && !blockedUsers.contains(clean)) {
       blockedUsers.add(clean);
     }
   }
 
-  void unblockUser(String nickname) {
-    final clean = nickname.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
+  void unblockUser(String nicknameOrUid) {
+    final trimmed = nicknameOrUid.trim().toLowerCase();
+    final clean = trimmed.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
     blockedUsers.removeWhere((b) {
       final cleanB = b.replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim().toLowerCase();
-      return b == nickname || cleanB == clean || b.toLowerCase() == nickname.toLowerCase();
+      return b.toLowerCase() == trimmed || cleanB == clean;
     });
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'provider': provider.name,
+      'email': email,
+      'nickname': nickname,
+      'preferredDiscipline': preferredDiscipline,
+      'homeResort': homeResort,
+      'level': level,
+      'joinedAt': joinedAt.toIso8601String(),
+      'completedRidesCount': completedRidesCount,
+      'taggedReviewsCount': taggedReviewsCount,
+      'snowPoints': snowPoints,
+      'riderTitle': riderTitle,
+      'blockedUsers': blockedUsers,
+      'eventNotification': eventNotification,
+      'eventConsentDate': eventConsentDate?.toIso8601String(),
+      'lastSnowPointDate': lastSnowPointDate?.toIso8601String(),
+    };
+  }
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    return UserProfile(
+      id: json['id'] ?? '',
+      provider: SocialAuthProvider.values.firstWhere(
+        (p) => p.name == json['provider'],
+        orElse: () => SocialAuthProvider.kakao,
+      ),
+      email: json['email'] ?? '',
+      nickname: json['nickname'] ?? '',
+      preferredDiscipline: json['preferredDiscipline'] ?? '스노보드',
+      homeResort: json['homeResort'] ?? '비발디파크',
+      level: json['level'] ?? '중급',
+      joinedAt: json['joinedAt'] != null
+          ? DateTime.tryParse(json['joinedAt']) ?? DateTime.now()
+          : DateTime.now(),
+      completedRidesCount: json['completedRidesCount'] ?? 0,
+      taggedReviewsCount: json['taggedReviewsCount'] ?? 0,
+      snowPoints: json['snowPoints'] ?? 0,
+      riderTitle: json['riderTitle'] ?? '비기너 라이더 🏂',
+      blockedUsers: List<String>.from(json['blockedUsers'] ?? []),
+      eventNotification: json['eventNotification'] ?? true,
+      eventConsentDate: json['eventConsentDate'] != null
+          ? DateTime.tryParse(json['eventConsentDate'])
+          : null,
+      lastSnowPointDate: json['lastSnowPointDate'] != null
+          ? DateTime.tryParse(json['lastSnowPointDate'])
+          : null,
+    );
   }
 }
 
-// 기본 로그인 사용자 (전역 상태)
-UserProfile? gCurrentUser = UserProfile(
-  id: 'user_kakao_9482',
-  provider: SocialAuthProvider.kakao,
-  email: 'rider***@kakao.com',
-  nickname: '익명의라이더#9482',
-  preferredDiscipline: '스노보드',
-  homeResort: '비발디파크',
-  level: '중급',
-  joinedAt: DateTime(2026, 1, 15),
-  completedRidesCount: 7,
-  taggedReviewsCount: 4,
-  snowPoints: 1450,
-  riderTitle: '골드 라이더 🏂',
-);
+// 기본 로그인 사용자 (반응형 전역 상태)
+final ValueNotifier<UserProfile?> gCurrentUserNotifier = ValueNotifier<UserProfile?>(null);
+
+UserProfile? get gCurrentUser => gCurrentUserNotifier.value;
+set gCurrentUser(UserProfile? val) {
+  gCurrentUserNotifier.value = val;
+}
 
 // 1일 랜덤 매칭 횟수 제한 (클린한 만남 & 어뷰징 방지)
 int gDailyRandomMatchLimit = 1;
@@ -792,6 +871,8 @@ class RideReview {
   int likeCount;
   bool isLiked;
   final int commentCount;
+  final String? authorUid;
+  final bool isAuthor;
 
   // 🚨 실시간 신고 및 3회 누적 자동 블라인드
   int reportCount;
@@ -801,6 +882,8 @@ class RideReview {
   RideReview({
     required this.id,
     required this.authorName,
+    this.authorUid,
+    this.isAuthor = false,
     required this.resortName,
     required this.snowCondition,
     this.rating = 5,
@@ -817,6 +900,38 @@ class RideReview {
   }) : reportedUserIds = reportedUserIds ?? [];
 
   bool get shouldHide => isBlinded || reportCount >= 3;
+}
+
+// -------------------------------------------------------------
+// ❄️ 실시간 슬로프 설질 한줄평 모델
+// -------------------------------------------------------------
+
+class LiveSnowComment {
+  final String id;
+  final String resortId;
+  final String resortName;
+  final String authorName;
+  final String? authorUid;
+  final String content;
+  final String snowCondition;
+  final String snowConditionEmoji;
+  final DateTime createdAt;
+  int likes;
+  List<String> likedUserNames;
+
+  LiveSnowComment({
+    required this.id,
+    required this.resortId,
+    required this.resortName,
+    required this.authorName,
+    this.authorUid,
+    required this.content,
+    required this.snowCondition,
+    required this.snowConditionEmoji,
+    required this.createdAt,
+    this.likes = 0,
+    List<String>? likedUserNames,
+  }) : likedUserNames = likedUserNames ?? [];
 }
 
 // -------------------------------------------------------------
@@ -976,48 +1091,6 @@ void showReportContentDialog({
     },
   );
 }
-
-List<RideReview> gRideReviews = [
-  RideReview(
-    id: 'rev_1',
-    authorName: '익명의라이더#8192',
-    resortName: '모나용평 (평창)',
-    snowCondition: '극상 파우더 ❄️',
-    rating: 5,
-    content: '오늘 4인 랜덤매칭으로 만난 메이트분들과 메가그린이랑 레드 탔는데 설질 진짜 미쳤습니다 ㅠㅠ 다들 친절하셔서 인생샷도 찍어주시고 꿀잼이었어요! 다음 주에 또 봬요 🙌',
-    photoLabels: ['용평 레드 정상 파우더 뷰 ❄️', '4인 메이트 슬로프 단체샷 🏂'],
-    tags: ['#4인랜덤매칭후기', '#용평레드', '#설질대박', '#오후라이딩'],
-    createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-    likeCount: 24,
-    commentCount: 5,
-  ),
-  RideReview(
-    id: 'rev_2',
-    authorName: '익명의라이더#4120',
-    resortName: '비발디파크 (홍천)',
-    snowCondition: '야간 압설 굿 🎿',
-    rating: 5,
-    content: '퇴근하고 비발디 야간 땡보딩 왔습니다! 테크노 슬로프 사람도 많이 없고 엣지 촥촥 박히네요 ㅎㅎ 같이타요 모집글 보고 합류했는데 시간 가는 줄 몰랐네요.',
-    photoLabels: ['비발디 테크노 야간 조명 🌙', '베이스 스키하우스 앞 ☕️'],
-    tags: ['#비발디야간', '#테크노', '#퇴근보딩', '#메이트모임'],
-    createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-    likeCount: 18,
-    commentCount: 3,
-  ),
-  RideReview(
-    id: 'rev_3',
-    authorName: '익명의라이더#1055',
-    resortName: '곤지암리조트 (광주)',
-    snowCondition: '설질 쾌적 ☀️',
-    rating: 4,
-    content: '윈디 상단 뷰 최고입니다. 평일 주간이라 리프트 대기 0초! 커피 한잔 마시고 2차전 갑니다 ☕️ 다들 안전 라이딩하세요!',
-    photoLabels: ['곤지암 윈디 슬로프 전경 🏔️'],
-    tags: ['#곤지암주간', '#윈디슬로프', '#스키메이트'],
-    createdAt: DateTime.now().subtract(const Duration(hours: 9)),
-    likeCount: 15,
-    commentCount: 2,
-  ),
-];
 
 // -------------------------------------------------------------
 // 국내 3대 스키장 (곤지암, 비발디파크, 모나용평)
@@ -1400,136 +1473,20 @@ class WeatherService {
 }
 
 // -------------------------------------------------------------
-// 초기 테스트용 타 유저 모집글
+// 전역 반응형 상태 (Firestore 실시간 스트림과 직접 바인딩)
 // -------------------------------------------------------------
 
-List<RidePost> createInitialSamplePosts() {
-  final now = DateTime.now();
-  return [
-    RidePost(
-      id: 'test_post_1',
-      title: '모나용평 옐로우/핑크에서 인터스키 패러렐 같이 연습해요!',
-      content: '혼자 타기 심심해서 같이 슬로프 타실 분 구합니다. 기본기 위주로 부담 없이 재밌게 타요! 휴식 때 따뜻한 커피 한잔해요 ☕️',
-      resortName: '모나용평 (평창)',
-      slopes: ['옐로우 (초급)', '핑크 (초중급)'],
-      discipline: '스키',
-      style: '인터스키',
-      skillLevel: '초급',
-      purpose: '같이타요',
-      dateText: '오늘',
-      timeSlot: '야간 (19:00~22:00)',
-      maxMembers: 2,
-      currentMembers: 1,
-      authorName: '평창눈사람',
-      isJoined: false,
-      isAuthor: false,
-      createdAt: now.subtract(const Duration(minutes: 15)),
-      chatMessages: [
-        ChatMessage(
-          sender: '시스템',
-          text: '모나용평 슬로프 메이트 대화방이 개설되었습니다.\n참가자들과 상세 위치 및 복장(헬멧/자켓 색상)을 조율해보세요!',
-          time: now.subtract(const Duration(minutes: 15)),
-          isSystem: true,
-        ),
-        ChatMessage(
-          sender: '평창눈사람 (방장)',
-          text: '안녕하세요! 오늘 야간에 핑크 리프트 앞에서 뵈어요. 저는 노란 자켓에 흰 헬멧 착용 중입니다~',
-          time: now.subtract(const Duration(minutes: 10)),
-          isMe: false,
-        ),
-      ],
-    ),
-    RidePost(
-      id: 'test_post_2',
-      title: '곤지암 윈디/제타 상급 슬로프 라이딩 영상 팔로잉 품앗이!',
-      content: '고프로 들고 탑니다. 윈디나 제타에서 서로 턴하는 모습 번갈아 가면서 찍어주실 분 계실까요? 안전 최우선으로 탑니다.',
-      resortName: '곤지암리조트 (광주)',
-      slopes: ['윈디 (중상급)', '제타 (상급)'],
-      discipline: '보드',
-      style: '테크니컬라이딩',
-      skillLevel: '중급',
-      purpose: '팔로잉',
-      dateText: '오늘',
-      timeSlot: '심야 (22~02)',
-      maxMembers: 1,
-      currentMembers: 1,
-      authorName: '곤지암라이더',
-      isJoined: false,
-      isAuthor: false,
-      createdAt: now.subtract(const Duration(minutes: 35)),
-      chatMessages: [
-        ChatMessage(
-          sender: '시스템',
-          text: '곤지암리조트 슬로프 메이트 대화방이 개설되었습니다.\n참가자들과 상세 위치 및 복장(헬멧/자켓 색상)을 조율해보세요!',
-          time: now.subtract(const Duration(minutes: 35)),
-          isSystem: true,
-        ),
-        ChatMessage(
-          sender: '곤지암라이더 (방장)',
-          text: '고프로 액션캠 배터리 완충해뒀습니다! 참가하시면 베이스 카페 앞에서 인사 나누고 올라가요!',
-          time: now.subtract(const Duration(minutes: 25)),
-          isMe: false,
-        ),
-      ],
-    ),
-    RidePost(
-      id: 'test_post_3',
-      title: '비발디파크 락/테크노에서 그라운드트릭 원포인트 팁 나눠요 🏂',
-      content: '버터링이랑 널리 연습 중인 3년차 보더입니다! 같이 타면서 서로 자세 봐주실 분 편하게 들어오세요~',
-      resortName: '비발디파크 (홍천)',
-      slopes: ['락 (중급)', '테크노 (상급)'],
-      discipline: '보드',
-      style: '그라운드트릭',
-      skillLevel: '중급',
-      purpose: '원포인트',
-      dateText: '오늘',
-      timeSlot: '주간 (08:30~16:30)',
-      maxMembers: 3,
-      currentMembers: 2,
-      authorName: '비발디보더',
-      isJoined: false,
-      isAuthor: false,
-      createdAt: now.subtract(const Duration(minutes: 50)),
-      chatMessages: [
-        ChatMessage(
-          sender: '시스템',
-          text: '비발디파크 슬로프 메이트 대화방이 개설되었습니다.',
-          time: now.subtract(const Duration(minutes: 50)),
-          isSystem: true,
-        ),
-      ],
-    ),
-    RidePost(
-      id: 'test_post_4',
-      title: '하이원 마운틴탑 롱 슬로프 관광보딩 메이트 모십니다 🏔️',
-      content: '풍경 감상하면서 여유롭게 롱 라이딩 즐기실 분! 초보분들도 환영합니다. 천천히 안전하게 내려와요.',
-      resortName: '하이원리조트 (정선)',
-      slopes: ['아테나 (초급)', '제우스 (초중급)'],
-      discipline: '스키',
-      style: '프리스키',
-      skillLevel: '초급',
-      purpose: '같이타요',
-      dateText: '오늘',
-      timeSlot: '주간 (09:00~16:00)',
-      maxMembers: 2,
-      currentMembers: 1,
-      authorName: '하이원새내기',
-      isJoined: false,
-      isAuthor: false,
-      createdAt: now.subtract(const Duration(hours: 1, minutes: 10)),
-      chatMessages: [
-        ChatMessage(
-          sender: '시스템',
-          text: '하이원리조트 슬로프 메이트 대화방이 개설되었습니다.',
-          time: now.subtract(const Duration(hours: 1, minutes: 10)),
-          isSystem: true,
-        ),
-      ],
-    ),
-  ];
+final ValueNotifier<List<RidePost>> gRidePostsNotifier = ValueNotifier<List<RidePost>>([]);
+List<RidePost> get gRidePosts => gRidePostsNotifier.value;
+set gRidePosts(List<RidePost> posts) {
+  gRidePostsNotifier.value = List<RidePost>.from(posts);
 }
 
-List<RidePost> gRidePosts = createInitialSamplePosts();
+final ValueNotifier<List<RideReview>> gRideReviewsNotifier = ValueNotifier<List<RideReview>>([]);
+List<RideReview> get gRideReviews => gRideReviewsNotifier.value;
+set gRideReviews(List<RideReview> reviews) {
+  gRideReviewsNotifier.value = List<RideReview>.from(reviews);
+}
 
 // -------------------------------------------------------------
 // -------------------------------------------------------------
@@ -1556,23 +1513,18 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _currentIndex = widget.initialIndex;
     _hubSubTabIndex = widget.initialHubSubTab;
-    // 🌐 실시간 모집글 스트림 구독
+    // 🌐 실시간 모집글 스트림 구독 (실제 Firestore 데이터만 연동)
     _postsSubscription = AppFirebaseService.instance.streamRidePosts().listen((posts) {
       if (mounted) {
-        final activePosts = posts.where((p) => !p.shouldHide).toList();
         setState(() {
-          if (activePosts.isNotEmpty) {
-            gRidePosts = posts;
-          } else {
-            gRidePosts = createInitialSamplePosts();
-          }
+          gRidePosts = posts;
         });
       }
     });
 
-    // 🌐 실시간 설질 후기 피드 스트림 구독
+    // 🌐 실시간 설질 후기 피드 스트림 구독 (실제 Firestore 데이터만 연동)
     _reviewsSubscription = AppFirebaseService.instance.streamReviews().listen((reviews) {
-      if (mounted && reviews.isNotEmpty) {
+      if (mounted) {
         setState(() {
           gRideReviews = reviews;
         });
@@ -1580,7 +1532,13 @@ class _MainScreenState extends State<MainScreen> {
     });
 
     // 🔔 기기 간 실시간 푸시 알림 리스너 시작 (상대방 알림만 수신)
-    NotificationService.instance.startRealtimeNotificationListener(gCurrentUser?.nickname ?? '');
+    NotificationService.instance.startRealtimeNotificationListener(
+      currentNickname: gCurrentUser?.nickname ?? '',
+      currentUid: gCurrentUser?.id ?? '',
+      getJoinedPostIds: () => gRidePosts.where((p) => p.canAccessChat).map((p) => p.id).toList(),
+      getBadgeCount: () => gRidePosts.where((p) => p.canAccessChat).fold<int>(0, (acc, p) => acc + p.unreadCount),
+    );
+    NotificationService.instance.syncTokenForUser(gCurrentUser?.id);
   }
 
   @override
@@ -1686,111 +1644,116 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final recentPosts = gRidePosts.where((post) {
-      if (post.purpose.contains('랜덤')) return false;
-      if (post.shouldHide) return false;
-      if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
-        return false;
-      }
-      return true;
-    }).toList();
+    return ValueListenableBuilder<List<RidePost>>(
+      valueListenable: gRidePostsNotifier,
+      builder: (context, currentPosts, _) {
+        final recentPosts = currentPosts.where((post) {
+          if (post.purpose.contains('랜덤')) return false;
+          if (post.shouldHide) return false;
+          if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
+            return false;
+          }
+          return true;
+        }).toList();
 
-    recentPosts.sort((a, b) {
-      final aTime = a.bumpedAt ?? a.createdAt;
-      final bTime = b.bumpedAt ?? b.createdAt;
-      return bTime.compareTo(aTime);
-    });
+        recentPosts.sort((a, b) {
+          final aTime = a.bumpedAt ?? a.createdAt;
+          final bTime = b.bumpedAt ?? b.createdAt;
+          return bTime.compareTo(aTime);
+        });
 
-    final displayedRecentPosts = recentPosts.take(4).toList();
+        final displayedRecentPosts = recentPosts.take(4).toList();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Image.asset(
-                'assets/logos/penguin_board.png',
-                width: 24,
-                height: 24,
-                fit: BoxFit.contain,
-              ),
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 1,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Image.asset(
+                    'assets/logos/penguin_board.png',
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  '같이타요',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    letterSpacing: -0.5,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    '26/27 시즌',
+                    style: TextStyle(fontSize: 10.5, color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            const Text(
-              '같이타요',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 20,
-                letterSpacing: -0.5,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2563EB),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                '26/27 시즌',
-                style: TextStyle(fontSize: 10.5, color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _loadWeathers();
-          if (mounted) setState(() {});
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // -------------------------------------------------------
-              // 1. ⚡️ 초고속 4인 랜덤 매칭 실시간 현황 & 원터치 진입 카드
-              // -------------------------------------------------------
-              _buildRandomMatchingLiveCard(),
-
-              const SizedBox(height: 26),
-
-              // -------------------------------------------------------
-              // 2. 🏂 실시간 같이 타요 최신 등록 항목들
-              // -------------------------------------------------------
-              _buildRecentPostsSection(displayedRecentPosts),
-
-              const SizedBox(height: 26),
-
-              // -------------------------------------------------------
-              // 3. ❄️ 주요 스키장 실시간 날씨 & 설질 현황
-              // -------------------------------------------------------
-              _buildResortWeatherSection(),
-
-              const SizedBox(height: 24),
-
-              // -------------------------------------------------------
-              // 4. ✍️ 원터치 모집글 등록 배너
-              // -------------------------------------------------------
-              _buildWritePostBanner(),
-
-              const SizedBox(height: 20),
-            ],
           ),
-        ),
-      ),
+          body: RefreshIndicator(
+            onRefresh: () async {
+              await _loadWeathers();
+              if (mounted) setState(() {});
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // -------------------------------------------------------
+                  // 1. ⚡️ 초고속 4인 랜덤 매칭 실시간 현황 & 원터치 진입 카드
+                  // -------------------------------------------------------
+                  _buildRandomMatchingLiveCard(),
+
+                  const SizedBox(height: 26),
+
+                  // -------------------------------------------------------
+                  // 2. 🏂 실시간 같이 타요 최신 등록 항목들
+                  // -------------------------------------------------------
+                  _buildRecentPostsSection(displayedRecentPosts),
+
+                  const SizedBox(height: 26),
+
+                  // -------------------------------------------------------
+                  // 3. ❄️ 주요 스키장 실시간 날씨 & 설질 현황
+                  // -------------------------------------------------------
+                  _buildResortWeatherSection(),
+
+                  const SizedBox(height: 24),
+
+                  // -------------------------------------------------------
+                  // 4. ✍️ 원터치 모집글 등록 배너
+                  // -------------------------------------------------------
+                  _buildWritePostBanner(),
+
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -3054,142 +3017,143 @@ class _RidePostListViewState extends State<RidePostListView> {
 
   @override
   Widget build(BuildContext context) {
-    final visiblePosts = gRidePosts.where((post) {
-      if (post.purpose.contains('랜덤')) return false; // 🚫 4인 랜덤매칭 대화방은 일반 모집글 피드에서 제외
-      if (post.shouldHide) return false;
-      if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
-        return false;
-      }
+    return ValueListenableBuilder<List<RidePost>>(
+      valueListenable: gRidePostsNotifier,
+      builder: (context, currentPosts, _) {
+        final visiblePosts = currentPosts.where((post) {
+          if (post.purpose.contains('랜덤')) return false; // 🚫 4인 랜덤매칭 대화방은 일반 모집글 피드에서 제외
+          if (post.shouldHide) return false;
+          if (gCurrentUser?.isUserBlocked(post.authorName) ?? false) {
+            return false;
+          }
 
-      // 1. 스키장(베이스) 필터
-      if (_selectedResort != '전체') {
-        if (!post.resortName.contains(_selectedResort)) {
-          return false;
-        }
-      }
+          // 1. 스키장(베이스) 필터
+          if (_selectedResort != '전체') {
+            if (!post.resortName.contains(_selectedResort)) {
+              return false;
+            }
+          }
 
-      // 2. 종목 필터 (스키 / 스노보드)
-      if (_selectedDiscipline != '전체') {
-        if (post.discipline != _selectedDiscipline) {
-          return false;
-        }
-      }
+          // 2. 종목 필터 (스키 / 스노보드)
+          if (_selectedDiscipline != '전체') {
+            if (post.discipline != _selectedDiscipline) {
+              return false;
+            }
+          }
 
-      // 3. 모집 상태 필터 (모집 중만 보기)
-      if (_onlyRecruiting && post.isFull) {
-        return false;
-      }
+          // 3. 모집 상태 필터 (모집 중만 보기)
+          if (_onlyRecruiting && post.isFull) {
+            return false;
+          }
 
-      // 4. 시간대 필터 (주간, 야간, 심야)
-      if (_selectedTimeSlot != '전체') {
-        if (!post.timeSlot.contains(_selectedTimeSlot)) {
-          return false;
-        }
-      }
+          // 4. 시간대 필터 (주간, 야간, 심야)
+          if (_selectedTimeSlot != '전체') {
+            if (!post.timeSlot.contains(_selectedTimeSlot)) {
+              return false;
+            }
+          }
 
-      // 5. 검색어 필터 (제목, 슬로프, 본문, 작성자)
-      if (_searchKeyword.isNotEmpty) {
-        final q = _searchKeyword.toLowerCase();
-        final matchTitle = post.title.toLowerCase().contains(q);
-        final matchSlopes = post.slopes.any((s) => s.toLowerCase().contains(q));
-        final matchContent = post.content.toLowerCase().contains(q);
-        final matchAuthor = post.authorName.toLowerCase().contains(q);
-        if (!matchTitle && !matchSlopes && !matchContent && !matchAuthor) {
-          return false;
-        }
-      }
+          // 5. 검색어 필터 (제목, 슬로프, 본문, 작성자)
+          if (_searchKeyword.isNotEmpty) {
+            final q = _searchKeyword.toLowerCase();
+            final matchTitle = post.title.toLowerCase().contains(q);
+            final matchSlopes = post.slopes.any((s) => s.toLowerCase().contains(q));
+            final matchContent = post.content.toLowerCase().contains(q);
+            final matchAuthor = post.authorName.toLowerCase().contains(q);
+            if (!matchTitle && !matchSlopes && !matchContent && !matchAuthor) {
+              return false;
+            }
+          }
 
-      return true;
-    }).toList();
+          return true;
+        }).toList();
 
-    visiblePosts.sort((a, b) {
-      final aTime = a.bumpedAt ?? a.createdAt;
-      final bTime = b.bumpedAt ?? b.createdAt;
-      return bTime.compareTo(aTime);
-    });
+        visiblePosts.sort((a, b) {
+          final aTime = a.bumpedAt ?? a.createdAt;
+          final bTime = b.bumpedAt ?? b.createdAt;
+          return bTime.compareTo(aTime);
+        });
 
-    final joinedPosts = _myJoinedPosts;
-    final totalUnreadCount = joinedPosts.fold<int>(0, (sum, p) => sum + p.unreadCount);
+        final joinedPosts = currentPosts.where((p) => p.canAccessChat).toList();
+        final totalUnreadCount = joinedPosts.fold<int>(0, (sum, p) => sum + p.unreadCount);
 
-    return Scaffold(
-      body: Column(
-        children: [
-          _buildFilterHeader(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
-                if (refreshed.isNotEmpty) {
-                  setState(() {
-                    gRidePosts = refreshed;
-                  });
-                } else {
-                  setState(() {});
-                }
-                await Future.delayed(const Duration(milliseconds: 300));
-              },
-              child: visiblePosts.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      itemCount: visiblePosts.length,
-                      itemBuilder: (context, index) {
-                        final post = visiblePosts[index];
-                        return _buildPostCard(post);
-                      },
-                    ),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (joinedPosts.isNotEmpty) ...[
-            if (totalUnreadCount > 0)
-              Badge(
-                label: Text('$totalUnreadCount', style: const TextStyle(fontWeight: FontWeight.bold)),
-                backgroundColor: Colors.redAccent,
-                child: FloatingActionButton(
-                  heroTag: 'floating_chat_button_hub',
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF2563EB),
-                  elevation: 4,
-                  shape: const CircleBorder(side: BorderSide(color: Color(0xFF2563EB), width: 1.5)),
-                  onPressed: _openMyChatRoomsModal,
-                  tooltip: '참여 중인 대화방 바로가기',
-                  child: const Icon(Icons.chat_bubble_rounded),
+        return Scaffold(
+          body: Column(
+            children: [
+              _buildFilterHeader(),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
+                    if (refreshed.isNotEmpty) {
+                      gRidePosts = refreshed;
+                    }
+                    await Future.delayed(const Duration(milliseconds: 300));
+                  },
+                  child: visiblePosts.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          itemCount: visiblePosts.length,
+                          itemBuilder: (context, index) {
+                            final post = visiblePosts[index];
+                            return _buildPostCard(post);
+                          },
+                        ),
                 ),
-              )
-            else
-              FloatingActionButton(
-                heroTag: 'floating_chat_button_hub',
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF2563EB),
-                elevation: 4,
-                shape: const CircleBorder(side: BorderSide(color: Color(0xFF2563EB), width: 1.5)),
-                onPressed: _openMyChatRoomsModal,
-                tooltip: '참여 중인 대화방 바로가기',
-                child: const Icon(Icons.chat_bubble_rounded),
               ),
-            const SizedBox(height: 12),
-          ],
-          FloatingActionButton.extended(
-            heroTag: 'floating_write_button_hub',
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-            onPressed: () => tryOpenWriteRidePostScreen(
-              context,
-              initialResortName: _selectedResort != '전체' ? _selectedResort : null,
-              onPostCreated: () => setState(() {}),
-            ),
-            icon: const Icon(Icons.edit),
-            label: const Text('글쓰기', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
           ),
-        ],
-      ),
+          floatingActionButton: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (joinedPosts.isNotEmpty) ...[
+                if (totalUnreadCount > 0)
+                  Badge(
+                    label: Text('$totalUnreadCount', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    backgroundColor: Colors.redAccent,
+                    child: FloatingActionButton(
+                      heroTag: 'floating_chat_button_hub',
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF2563EB),
+                      elevation: 4,
+                      shape: const CircleBorder(side: BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                      onPressed: _openMyChatRoomsModal,
+                      tooltip: '참여 중인 대화방 바로가기',
+                      child: const Icon(Icons.chat_bubble_rounded),
+                    ),
+                  )
+                else
+                  FloatingActionButton(
+                    heroTag: 'floating_chat_button_hub',
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF2563EB),
+                    elevation: 4,
+                    shape: const CircleBorder(side: BorderSide(color: Color(0xFF2563EB), width: 1.5)),
+                    onPressed: _openMyChatRoomsModal,
+                    tooltip: '참여 중인 대화방 바로가기',
+                    child: const Icon(Icons.chat_bubble_rounded),
+                  ),
+                const SizedBox(height: 12),
+              ],
+              FloatingActionButton.extended(
+                heroTag: 'floating_write_button_hub',
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                onPressed: () => tryOpenWriteRidePostScreen(
+                  context,
+                  initialResortName: _selectedResort != '전체' ? _selectedResort : null,
+                  onPostCreated: () => setState(() {}),
+                ),
+                icon: const Icon(Icons.edit),
+                label: const Text('글쓰기', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -6887,126 +6851,129 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = gCurrentUser;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.manage_accounts_rounded,
-                color: Color(0xFF2563EB),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              '개인설정 & 활동기록',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                letterSpacing: -0.5,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: user == null
-          ? _buildLoggedOutView()
-          : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. 소셜 로그인 계정 프로필 카드
-                  _buildProfileCard(user),
-
-                  const SizedBox(height: 24),
-
-                  // 2. 나의 슬로프 활동 지표 대시보드
-                  _buildSectionTitle('나의 슬로프 활동 지표 🏆'),
-                  const SizedBox(height: 8),
-                  _buildActivityDashboardCard(user),
-
-                  const SizedBox(height: 24),
-
-                  // 3. 나의 슬로프 배지 보관함
-                  _buildSectionTitle('슬로프 배지 보관함 🎖️'),
-                  const SizedBox(height: 8),
-                  _buildBadgeCollectionCard(user),
-
-                  const SizedBox(height: 24),
-
-                  // 4. 나의 라이딩 성향 설정
-                  _buildSectionTitle('나의 라이딩 설정 🏂'),
-                  const SizedBox(height: 8),
-                  _buildRidingPreferenceCard(user),
-
-                  const SizedBox(height: 24),
-
-                  // 5. 알림 및 보안 센터
-                  _buildSectionTitle('알림 & 익명성 보안 🔒'),
-                  const SizedBox(height: 8),
-                  _buildSecurityCard(),
-
-                  const SizedBox(height: 24),
-
-                  // 6. 🛠️ QA & 자체 테스트 도구 (Sandbox) - 릴리즈 모드 및 앱스토어 심사 시 자동 숨김
-                  if (kDebugMode || _showDevMenu) ...[
-                    _buildSectionTitle('🛠️ 개발자 & 자체 테스트 도구 (Sandbox)'),
-                    const SizedBox(height: 8),
-                    _buildQASandboxCard(),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // 7. 계정 관리
-                  _buildSectionTitle('계정 관리'),
-                  const SizedBox(height: 8),
-                  _buildAccountCard(user),
-
-                  const SizedBox(height: 30),
-                  Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _versionTapCount++;
-                          if (_versionTapCount >= 5) {
-                            _showDevMenu = !_showDevMenu;
-                            _versionTapCount = 0;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(_showDevMenu
-                                    ? '🛠️ 개발자 샌드박스 도구가 활성화되었습니다.'
-                                    : '🔒 개발자 샌드박스 도구가 숨겨졌습니다.'),
-                                duration: const Duration(seconds: 2),
-                                backgroundColor: const Color(0xFF1E293B),
-                              ),
-                            );
-                          }
-                        });
-                      },
-                      child: Text(
-                        '같이타요 v1.0.0 • 26/27 시즌\n카카오 • 네이버 • Apple 공식 OAuth 연동',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
-                      ),
-                    ),
+    return ValueListenableBuilder<UserProfile?>(
+      valueListenable: gCurrentUserNotifier,
+      builder: (context, user, _) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 1,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                  child: const Icon(
+                    Icons.manage_accounts_rounded,
+                    color: Color(0xFF2563EB),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  '개인설정 & 활동기록',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    letterSpacing: -0.5,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
+          ),
+          body: user == null
+              ? _buildLoggedOutView()
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. 소셜 로그인 계정 프로필 카드
+                      _buildProfileCard(user),
+
+                      const SizedBox(height: 24),
+
+                      // 2. 나의 슬로프 활동 지표 대시보드
+                      _buildSectionTitle('나의 슬로프 활동 지표 🏆'),
+                      const SizedBox(height: 8),
+                      _buildActivityDashboardCard(user),
+
+                      const SizedBox(height: 24),
+
+                      // 3. 나의 슬로프 배지 보관함
+                      _buildSectionTitle('슬로프 배지 보관함 🎖️'),
+                      const SizedBox(height: 8),
+                      _buildBadgeCollectionCard(user),
+
+                      const SizedBox(height: 24),
+
+                      // 4. 나의 라이딩 성향 설정
+                      _buildSectionTitle('나의 라이딩 설정 🏂'),
+                      const SizedBox(height: 8),
+                      _buildRidingPreferenceCard(user),
+
+                      const SizedBox(height: 24),
+
+                      // 5. 알림 및 보안 센터
+                      _buildSectionTitle('알림 & 익명성 보안 🔒'),
+                      const SizedBox(height: 8),
+                      _buildSecurityCard(),
+
+                      const SizedBox(height: 24),
+
+                      // 6. 🛠️ QA & 자체 테스트 도구 (Sandbox) - 릴리즈 모드 및 앱스토어 심사 시 자동 숨김
+                      if (kDebugMode || _showDevMenu) ...[
+                        _buildSectionTitle('🛠️ 개발자 & 자체 테스트 도구 (Sandbox)'),
+                        const SizedBox(height: 8),
+                        _buildQASandboxCard(),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // 7. 계정 관리
+                      _buildSectionTitle('계정 관리'),
+                      const SizedBox(height: 8),
+                      _buildAccountCard(user),
+
+                      const SizedBox(height: 30),
+                      Center(
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _versionTapCount++;
+                              if (_versionTapCount >= 5) {
+                                _showDevMenu = !_showDevMenu;
+                                _versionTapCount = 0;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(_showDevMenu
+                                        ? '🛠️ 개발자 샌드박스 도구가 활성화되었습니다.'
+                                        : '🔒 개발자 샌드박스 도구가 숨겨졌습니다.'),
+                                    duration: const Duration(seconds: 2),
+                                    backgroundColor: const Color(0xFF1E293B),
+                                  ),
+                                );
+                              }
+                            });
+                          },
+                          child: Text(
+                            '같이타요 v1.0.0 • 26/27 시즌\n카카오 • 네이버 • Apple 공식 OAuth 연동',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+        );
+      },
     );
   }
 
@@ -7827,47 +7794,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  onPressed: () {
-                    setState(() {
-                      gRidePosts = createInitialSamplePosts();
-                      gRideReviews = [
-                        RideReview(
-                          id: 'rev_1',
-                          authorName: '익명의라이더#8192',
-                          resortName: '모나용평 (평창)',
-                          snowCondition: '극상 파우더 ❄️',
-                          rating: 5,
-                          content: '오늘 4인 랜덤매칭으로 만난 메이트분들과 메가그린이랑 레드 탔는데 설질 진짜 미쳤습니다 ㅠㅠ 다들 친절하셔서 인생샷도 찍어주시고 꿀잼이었어요! 다음 주에 또 봬요 🙌',
-                          photoLabels: ['용평 레드 정상 파우더 뷰 ❄️', '4인 메이트 슬로프 단체샷 🏂'],
-                          tags: ['#4인랜덤매칭후기', '#용평레드', '#설질대박', '#오후라이딩'],
-                          createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-                          likeCount: 24,
-                          commentCount: 5,
+                  onPressed: () async {
+                    final posts = await AppFirebaseService.instance.getRidePostsOnce();
+                    final reviews = await AppFirebaseService.instance.getReviewsOnce();
+                    if (mounted) {
+                      setState(() {
+                        gRidePosts = posts;
+                        gRideReviews = reviews;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF065F46),
+                          content: Text('🔄 Firestore 서버 데이터와 새로 동기화되었습니다.'),
                         ),
-                        RideReview(
-                          id: 'rev_2',
-                          authorName: '익명의라이더#4120',
-                          resortName: '비발디파크 (홍천)',
-                          snowCondition: '야간 압설 굿 🎿',
-                          rating: 5,
-                          content: '퇴근하고 비발디 야간 땡보딩 왔습니다! 테크노 슬로프 사람도 많이 없고 엣지 촥촥 박히네요 ㅎㅎ 같이타요 모집글 보고 합류했는데 시간 가는 줄 몰랐네요.',
-                          photoLabels: ['비발디 테크노 야간 조명 🌙', '베이스 스키하우스 앞 ☕️'],
-                          tags: ['#비발디야간', '#테크노', '#퇴근보딩', '#메이트모임'],
-                          createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-                          likeCount: 18,
-                          commentCount: 3,
-                        ),
-                      ];
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF065F46),
-                        content: Text('📦 샘플 테스트 데이터가 정상 복원되었습니다.'),
-                      ),
-                    );
+                      );
+                    }
                   },
-                  icon: const Icon(Icons.restore_rounded, size: 16),
-                  label: const Text('샘플 데이터 복원', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.cloud_sync_rounded, size: 16),
+                  label: const Text('서버 데이터 동기화', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -8109,7 +8053,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         setState(() {
                           gCurrentUser = acc;
                         });
-                        NotificationService.instance.startRealtimeNotificationListener(acc.nickname);
+                        NotificationService.instance.startRealtimeNotificationListener(
+                          currentNickname: acc.nickname,
+                          currentUid: acc.id,
+                          getJoinedPostIds: () => gRidePosts.where((p) => p.canAccessChat).map((p) => p.id).toList(),
+                          getBadgeCount: () => gRidePosts.where((p) => p.canAccessChat).fold<int>(0, (acc, p) => acc + p.unreadCount),
+                        );
+                        NotificationService.instance.syncTokenForUser(acc.id);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -9041,13 +8991,31 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   void initState() {
     super.initState();
     widget.post.unreadCount = 0;
+    final unreadTotal = gRidePosts.where((p) => p.canAccessChat).fold<int>(0, (acc, p) => acc + p.unreadCount);
+    gUnreadChatCountNotifier.value = unreadTotal;
+    if (unreadTotal == 0) {
+      NotificationService.instance.clearAllNotificationsAndBadge();
+    }
   }
 
   @override
   void dispose() {
     _msgController.dispose();
     _scrollController.dispose();
+    widget.post.unreadCount = 0;
+    final unreadTotal = gRidePosts.where((p) => p.canAccessChat).fold<int>(0, (acc, p) => acc + p.unreadCount);
+    gUnreadChatCountNotifier.value = unreadTotal;
+    if (unreadTotal == 0) {
+      NotificationService.instance.clearAllNotificationsAndBadge();
+    }
     super.dispose();
+  }
+
+  String _formatMessageTime(DateTime dt) {
+    final period = dt.hour < 12 ? '오전' : '오후';
+    final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    return '$period $hour:$minute';
   }
 
   void _sendMessage() {
@@ -9140,20 +9108,48 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (msg.isMe || msg.isSystem) return false;
     final user = gCurrentUser;
     if (user == null) return false;
-    if (user.isUserBlocked(msg.sender)) return true;
-    if (msg.realSenderName != null && user.isUserBlocked(msg.realSenderName!)) return true;
+    if (msg.senderUid != null && msg.senderUid == user.id) return false;
+    if (msg.realSenderName != null && msg.realSenderName == user.nickname) return false;
     if (msg.senderUid != null && user.isUserBlocked(msg.senderUid!)) return true;
+    if (msg.realSenderName != null && user.isUserBlocked(msg.realSenderName!)) return true;
+    if (user.isUserBlocked(msg.sender)) return true;
     return false;
   }
 
   void _showBlockParticipantModal() {
-    final myNickname = gCurrentUser?.nickname ?? '';
+    final String myAssignedName;
+    if (widget.post.isAnonymous) {
+      if (widget.post.isAuthor) {
+        myAssignedName = '익명의라이더 A';
+      } else {
+        myAssignedName = widget.post.participantNames.firstWhere(
+          (name) => name != widget.post.authorName && (name.startsWith('익명의라이더') || name.startsWith('익명의 라이더')),
+          orElse: () => '',
+        );
+      }
+    } else {
+      myAssignedName = gCurrentUser?.nickname ?? '';
+    }
+    final myRealName = gCurrentUser?.nickname ?? '';
+
     final otherParticipants = <String>[];
-    if (widget.post.authorName != myNickname && !otherParticipants.contains(widget.post.authorName)) {
+    if (!widget.post.isAuthor &&
+        widget.post.authorName.isNotEmpty &&
+        widget.post.authorName != myAssignedName &&
+        widget.post.authorName != myRealName &&
+        !widget.post.authorName.contains('방장')) {
+      otherParticipants.add(widget.post.authorName);
+    } else if (!widget.post.isAuthor && widget.post.authorName.isNotEmpty && widget.post.authorName != myAssignedName && widget.post.authorName != myRealName) {
       otherParticipants.add(widget.post.authorName);
     }
+
     for (final p in widget.post.participantNames) {
-      if (p != myNickname && !otherParticipants.contains(p)) {
+      if (p.isNotEmpty &&
+          p != myAssignedName &&
+          p != myRealName &&
+          p != '나' &&
+          p != '나 (방장)' &&
+          !otherParticipants.contains(p)) {
         otherParticipants.add(p);
       }
     }
@@ -9630,85 +9626,105 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
                     final bool isBlockedSender = _isMessageFromBlockedUser(msg);
 
-                    return Align(
-                      alignment: msg.isMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                        decoration: BoxDecoration(
-                          color: isBlockedSender
-                              ? const Color(0xFFFEF2F2)
-                              : (msg.isMe ? const Color(0xFF2563EB) : Colors.grey.shade100),
-                          borderRadius: BorderRadius.circular(14),
-                          border: isBlockedSender
-                              ? Border.all(color: const Color(0xFFFCA5A5), width: 1.2)
-                              : null,
+                    final timeStr = _formatMessageTime(msg.time);
+                    final timeWidget = Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Text(
+                        timeStr,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.w400,
                         ),
-                        child: Column(
-                          crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                          children: [
-                            if (!msg.isMe) ...[
-                              if (isBlockedSender)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
+                      ),
+                    );
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: msg.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (msg.isMe) timeWidget,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.70),
+                            decoration: BoxDecoration(
+                              color: isBlockedSender
+                                  ? const Color(0xFFFEF2F2)
+                                  : (msg.isMe ? const Color(0xFF2563EB) : Colors.grey.shade100),
+                              borderRadius: BorderRadius.circular(14),
+                              border: isBlockedSender
+                                  ? Border.all(color: const Color(0xFFFCA5A5), width: 1.2)
+                                  : null,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: msg.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                              children: [
+                                if (!msg.isMe) ...[
+                                  if (isBlockedSender)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          msg.sender,
+                                          style: const TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFFDC2626),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFEE2E2),
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: const Color(0xFFF87171), width: 0.8),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.block_rounded, size: 9.5, color: Color(0xFFDC2626)),
+                                              SizedBox(width: 2.5),
+                                              Text(
+                                                '차단된 사용자',
+                                                style: TextStyle(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFFDC2626),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
                                     Text(
                                       msg.sender,
                                       style: const TextStyle(
-                                        fontSize: 11.5,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFFDC2626),
+                                        color: Colors.grey,
                                       ),
                                     ),
-                                    const SizedBox(width: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFEE2E2),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: const Color(0xFFF87171), width: 0.8),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.block_rounded, size: 9.5, color: Color(0xFFDC2626)),
-                                          SizedBox(width: 2.5),
-                                          Text(
-                                            '차단된 사용자',
-                                            style: TextStyle(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFFDC2626),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
+                                  const SizedBox(height: 3),
+                                ],
                                 Text(
-                                  msg.sender,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
+                                  msg.text,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: isBlockedSender
+                                        ? const Color(0xFF991B1B)
+                                        : (msg.isMe ? Colors.white : Colors.black87),
                                   ),
                                 ),
-                              const SizedBox(height: 3),
-                            ],
-                            Text(
-                              msg.text,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: isBlockedSender
-                                    ? const Color(0xFF991B1B)
-                                    : (msg.isMe ? Colors.white : Colors.black87),
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          if (!msg.isMe) timeWidget,
+                        ],
                       ),
                     );
                   },

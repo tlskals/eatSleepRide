@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.projectt</string>
+	<string>com.tlskals.eatsleepride</string>
 	<key>PROJECT_ID</key>
 	<string>eatsleepride-bdd5f</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:239117471945:ios:2b04f8d73853e9a5253d18</string>
+	<string>1:239117471945:ios:bd9d590d09f548e0253d18</string>
 </dict>
 </plist>

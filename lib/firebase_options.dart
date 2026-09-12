@@ -62,11 +62,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyB-13pHLzUPdvKoUUcjxgZ-MtzUAvVoj3c',
-    appId: '1:239117471945:ios:2b04f8d73853e9a5253d18',
+    appId: '1:239117471945:ios:bd9d590d09f548e0253d18',
     messagingSenderId: '239117471945',
     projectId: 'eatsleepride-bdd5f',
     storageBucket: 'eatsleepride-bdd5f.firebasestorage.app',
-    iosBundleId: 'com.example.projectt',
+    iosBundleId: 'com.tlskals.eatsleepride',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -75,6 +75,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '239117471945',
     projectId: 'eatsleepride-bdd5f',
     storageBucket: 'eatsleepride-bdd5f.firebasestorage.app',
-    iosBundleId: 'com.example.projectt',
+    iosBundleId: 'com.tlskals.eatsleepride',
   );
 }
