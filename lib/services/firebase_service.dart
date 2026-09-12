@@ -732,8 +732,12 @@ class AppFirebaseService {
         .map((snapshot) => snapshot.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
 
-  Stream<DocumentSnapshot<Map<String, dynamic>>> streamUserMatchStatus(String uid) {
-    return _firestore.collection('user_match_status').doc(uid).snapshots();
+  Stream<Map<String, dynamic>?> streamUserMatchStatus(String uid) {
+    return _firestore
+        .collection('user_match_status')
+        .doc(uid)
+        .snapshots()
+        .map((doc) => doc.data());
   }
 
   Future<void> joinMatchQueue({

@@ -422,7 +422,11 @@ class RidePost {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
   bool get isFull => currentMembers >= (maxMembers + 1);
-  bool get canAccessChat => (isAuthor || isJoined) && !isExpired && !isBlinded;
+  bool get canAccessChat =>
+      gCurrentUser != null &&
+      (isAuthor || isJoined || (gCurrentUser?.nickname != null && participantNames.contains(gCurrentUser!.nickname))) &&
+      !isExpired &&
+      !isBlinded;
   bool get shouldHide => isBlinded || reportCount >= 3 || isExpired;
 }
 
@@ -727,12 +731,59 @@ RidePost? getMyActivePost() {
   );
 }
 
-// ✍️ 안전한 모집글 작성 화면 오픈 핸들러 (새벽시간 제한 / 1인 1글 제한 / 탈주 페널티 전방위 검증)
+/// 🔒 로그인 여부 전역 검증 및 소셜 로그인 유도 모달
+bool ensureUserLoggedIn(BuildContext context, {String actionName = '이 기능'}) {
+  if (gCurrentUser != null) return true;
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      title: const Row(
+        children: [
+          Icon(Icons.lock_rounded, color: Color(0xFF2563EB), size: 24),
+          SizedBox(width: 8),
+          Text('로그인이 필요합니다', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        ],
+      ),
+      content: Text(
+        '$actionName을(를) 이용하시려면 로그인이 필요합니다.\n\n카카오, Apple, Google 소셜 계정으로 3초 만에 안전하게 시작해보세요 🎿',
+        style: const TextStyle(fontSize: 13.5, height: 1.45, color: Colors.black87),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('취소', style: TextStyle(color: Colors.grey)),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2563EB),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('소셜 로그인하기'),
+        ),
+      ],
+    ),
+  );
+  return false;
+}
+
+// ✍️ 안전한 모집글 작성 화면 오픈 핸들러 (로그인 검증 / 새벽시간 제한 / 1인 1글 제한 / 탈주 페널티 전방위 검증)
 Future<void> tryOpenWriteRidePostScreen(
   BuildContext context, {
   VoidCallback? onPostCreated,
   String? initialResortName,
 }) async {
+  // 0. 로그인 여부 확인
+  if (!ensureUserLoggedIn(context, actionName: '모집글을 작성')) return;
+
   // 1. 새벽 글작성 제한 시간대 검사 (02:00 ~ 07:00)
   if (!isWritingHoursAllowed()) {
     showDialog(
@@ -1825,6 +1876,7 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 48,
             child: ElevatedButton(
               onPressed: () {
+                if (!ensureUserLoggedIn(context, actionName: '4인 랜덤 매칭')) return;
                 widget.onNavigateToTab(1, subTabIndex: 1); // 같이 타요 > 랜덤 매칭 탭으로 이동
               },
               style: ElevatedButton.styleFrom(
@@ -3414,16 +3466,11 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   int _matchedCount = 1;
   int _elapsedSeconds = 0;
   Timer? _tickerTimer;
-  Timer? _matchProgressTimer;
+  StreamSubscription<List<Map<String, dynamic>>>? _queueSubscription;
+  StreamSubscription<Map<String, dynamic>?>? _statusSubscription;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-
-  final List<String> _anonymousNames = [
-    '익명의 라이더 A',
-    '익명의 라이더 B',
-    '익명의 라이더 C',
-  ];
 
   final List<String> _currentQueue = [];
 
@@ -3442,7 +3489,8 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   @override
   void dispose() {
     _tickerTimer?.cancel();
-    _matchProgressTimer?.cancel();
+    _queueSubscription?.cancel();
+    _statusSubscription?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -3515,7 +3563,6 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                // 일반 같이타요 탭으로 전환
                 final tabController = DefaultTabController.of(context);
                 tabController.animateTo(0);
               },
@@ -3533,20 +3580,25 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   }
 
   void _startMatching() {
+    if (!ensureUserLoggedIn(context, actionName: '4인 랜덤 매칭')) return;
+
     if (gDailyRandomMatchRemaining <= 0) {
       _showDailyLimitExceededDialog();
       return;
     }
+
+    final currentUser = gCurrentUser;
+    if (currentUser == null) return;
 
     setState(() {
       _isMatching = true;
       _matchedCount = 1;
       _elapsedSeconds = 0;
       _currentQueue.clear();
-      _currentQueue.add('나 (참여자)');
+      _currentQueue.add(currentUser.nickname);
     });
 
-    // 1초마다 경과 시간 증가
+    _tickerTimer?.cancel();
     _tickerTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       setState(() {
@@ -3554,44 +3606,94 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
       });
     });
 
-    // 2번째 익명 라이더 합류 (1.6초 후)
-    Future.delayed(const Duration(milliseconds: 1600), () {
-      if (!_isMatching || !mounted) return;
+    // 1. 실제 Firestore 실시간 대기 큐 등록
+    AppFirebaseService.instance.joinMatchQueue(
+      resortId: _selectedResort.id,
+      resortName: _selectedResort.name,
+      shortName: _selectedResort.shortName,
+      uid: currentUser.id,
+      nickname: currentUser.nickname,
+    );
+
+    // 2. 대기열 인원 실시간 구독
+    _queueSubscription?.cancel();
+    _queueSubscription = AppFirebaseService.instance.streamMatchQueue(_selectedResort.id).listen((riders) {
+      if (!mounted || !_isMatching) return;
       setState(() {
-        _matchedCount = 2;
-        _currentQueue.add(_anonymousNames[0]);
+        _matchedCount = riders.length.clamp(1, 4);
+        _currentQueue.clear();
+        for (final r in riders) {
+          final nick = r['nickname'] as String? ?? '익명 라이더';
+          _currentQueue.add(nick);
+        }
       });
     });
 
-    // 3번째 익명 라이더 합류 (3.4초 후)
-    Future.delayed(const Duration(milliseconds: 3400), () {
-      if (!_isMatching || !mounted) return;
-      setState(() {
-        _matchedCount = 3;
-        _currentQueue.add(_anonymousNames[1]);
-      });
-    });
+    // 3. 나의 매칭 성사 상태 구독
+    _statusSubscription?.cancel();
+    _statusSubscription = AppFirebaseService.instance.streamUserMatchStatus(currentUser.id).listen((data) async {
+      if (!mounted || !_isMatching || data == null) return;
+      if (data['status'] == 'matched' && data['matchedPostId'] != null) {
+        final matchedPostId = data['matchedPostId'] as String;
+        _cancelMatching(leaveQueue: false);
 
-    // 4번째 익명 라이더 합류 및 매칭 성사 (5.2초 후)
-    Future.delayed(const Duration(milliseconds: 5200), () {
-      if (!_isMatching || !mounted) return;
-      setState(() {
-        _matchedCount = 4;
-        _currentQueue.add(_anonymousNames[2]);
-      });
+        // 1일 1회 차감
+        setState(() {
+          gDailyRandomMatchRemaining = 0;
+        });
 
-      // 매칭 성공 축하 후 완전 익명 단체 채팅방 자동 입장
-      Future.delayed(const Duration(milliseconds: 1000), () {
-        if (!_isMatching || !mounted) return;
-        _cancelMatching();
-        _createAndEnterRandomChatRoom(_selectedResort);
-      });
+        // 잠시 후 채팅방으로 이동
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+
+        // 모집글 목록에서 찾거나 없으면 임시 방 생성 후 입장
+        final post = gRidePosts.firstWhere(
+          (p) => p.id == matchedPostId,
+          orElse: () => RidePost(
+            id: matchedPostId,
+            title: '[⚡️ 4인 매칭] ${_selectedResort.shortName} 실시간 번개',
+            content: '${_selectedResort.name} 4인 슬로프 메이트 대화방',
+            resortName: _selectedResort.name,
+            slopes: ['전체 슬로프 (자유)'],
+            discipline: '혼합',
+            style: '자유 라이딩',
+            skillLevel: '무관',
+            purpose: '랜덤 매칭',
+            dateText: '오늘 실시간',
+            timeSlot: '실시간 즉시',
+            maxMembers: 3,
+            currentMembers: 4,
+            authorName: '시스템',
+            isJoined: true,
+            chatMessages: [
+              ChatMessage(
+                sender: '시스템',
+                text: '🎉 [${_selectedResort.shortName}] 4인 실시간 매칭이 성사되었습니다!\n함께할 메이트들과 반갑게 인사하고 슬로프 약속을 정해보세요 ⛷️🏂',
+                time: DateTime.now(),
+                isSystem: true,
+              ),
+            ],
+          ),
+        );
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChatRoomScreen(post: post),
+          ),
+        );
+      }
     });
   }
 
-  void _cancelMatching() {
+  void _cancelMatching({bool leaveQueue = true}) {
     _tickerTimer?.cancel();
-    _matchProgressTimer?.cancel();
+    _queueSubscription?.cancel();
+    _statusSubscription?.cancel();
+
+    if (leaveQueue && gCurrentUser != null) {
+      AppFirebaseService.instance.leaveMatchQueue(_selectedResort.id, gCurrentUser!.id);
+    }
+
     if (mounted) {
       setState(() {
         _isMatching = false;
@@ -3600,76 +3702,6 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
         _currentQueue.clear();
       });
     }
-  }
-
-  void _createAndEnterRandomChatRoom(SkiResort resort) {
-    // 1일 1회 매칭 기회 차감
-    setState(() {
-      gDailyRandomMatchRemaining = 0;
-    });
-
-    final now = DateTime.now();
-    final newPost = RidePost(
-      id: 'random_match_${now.millisecondsSinceEpoch}',
-      title: '[⚡️ 4인 랜덤매칭] ${resort.shortName} 실시간 번개',
-      content: '${resort.name}에서 모인 4인 실시간 슬로프 메이트 모임입니다. 슬로프에서 만나요!',
-      resortName: resort.name,
-      slopes: ['전체 슬로프 (자유)'],
-      discipline: '스키/보드 혼합',
-      style: '자유 라이딩',
-      skillLevel: '무관',
-      purpose: '랜덤 매칭',
-      dateText: '오늘 실시간',
-      timeSlot: '실시간 즉시',
-      maxMembers: 3,
-      currentMembers: 4,
-      authorName: '나',
-      isJoined: true,
-      isAuthor: false,
-      chatMessages: [
-        ChatMessage(
-          sender: '시스템',
-          text: '🎉 [${resort.shortName}] 4인 슬로프 메이트가 매칭되었습니다!\n만날 위치(리프트 앞, 시계탑 등)와 복장(자켓 색상 등)을 편하게 조율해보세요 🎿🏂',
-          time: now,
-          isSystem: true,
-        ),
-        ChatMessage(
-          sender: '익명의 라이더 A',
-          text: '안녕하세요! 다들 반갑습니다 🙌 오늘 ${resort.shortName} 설질 진짜 좋네요!',
-          time: now.add(const Duration(seconds: 1)),
-          isMe: false,
-        ),
-        ChatMessage(
-          sender: '익명의 라이더 B',
-          text: '반가워요~ 저는 메인 베이스 스키하우스 앞인데 몇 시쯤 모일까요?',
-          time: now.add(const Duration(seconds: 2)),
-          isMe: false,
-        ),
-        ChatMessage(
-          sender: '익명의 라이더 C',
-          text: '오 좋아요! 저도 바로 합류할게요 ㅎㅎ 커피 한잔 들고 가겠습니다 ☕️',
-          time: now.add(const Duration(seconds: 3)),
-          isMe: false,
-        ),
-      ],
-    );
-
-    // 전체 글 목록 최상단에 추가
-    gRidePosts.insert(0, newPost);
-
-    // 🔔 4인 매칭 성공 로컬 푸시 알림 배너 띄우기
-    NotificationService.instance.showLocalNotification(
-      title: '⚡️ 4인 슬로프 번개 매칭 완료!',
-      body: '[${resort.shortName}] 번개 동행 4인이 모두 모였습니다. 지금 대화방에서 만남 위치를 확인해보세요! ⛷️🏂',
-      payload: newPost.id,
-    );
-
-    // 채팅방 화면으로 바로 이동
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatRoomScreen(post: newPost),
-      ),
-    );
   }
 
   @override
@@ -4266,6 +4298,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                           const SizedBox(height: 20),
                           ElevatedButton.icon(
                             onPressed: () {
+                              if (!ensureUserLoggedIn(context, actionName: '설질 & 라이딩 후기를 작성')) return;
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => const WriteRideReviewScreen()),
@@ -4299,6 +4332,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
+          if (!ensureUserLoggedIn(context, actionName: '설질 & 라이딩 후기를 작성')) return;
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const WriteRideReviewScreen()),
@@ -4885,6 +4919,8 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
   }
 
   Future<void> _submitReview() async {
+    if (!ensureUserLoggedIn(context, actionName: '설질 후기를 등록')) return;
+
     final content = _contentController.text.trim();
     if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6013,7 +6049,8 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
 }
 
 // -------------------------------------------------------------
-// 실시간 슬로프 현황판 위젯
+// -------------------------------------------------------------
+// 슬로프 제원 & 코스 정보 위젯
 // -------------------------------------------------------------
 class DetailedSlopeStatusWidget extends StatefulWidget {
   final SkiResort resort;
@@ -6031,11 +6068,6 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
     final slopes = widget.resort.detailedSlopes;
     final sections = ['전체', ...{for (var s in slopes) s.section}];
 
-    final openCount = slopes.where((s) => s.status == SlopeStatus.open).length;
-    final mogulCount = slopes.where((s) => s.status == SlopeStatus.mogul).length;
-    final parkCount = slopes.where((s) => s.status == SlopeStatus.park).length;
-    final closedCount = slopes.where((s) => s.status == SlopeStatus.closed).length;
-
     final filteredSlopes = _selectedSection == '전체'
         ? slopes
         : slopes.where((s) => s.section == _selectedSection).toList();
@@ -6048,49 +6080,21 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
           children: [
             Row(
               children: [
-                const Text('⛷️ 실시간 슬로프 현황판', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const Text('⛷️ 슬로프 코스 & 제원 정보', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 6),
                 Text('총 ${slopes.length}개', style: TextStyle(fontSize: 13, color: widget.resort.themeColor, fontWeight: FontWeight.bold)),
               ],
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: const Color(0xFF2563EB).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.green.shade200),
+                border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.2)),
               ),
-              child: const Row(
-                children: [
-                  CircleAvatar(radius: 3, backgroundColor: Colors.green),
-                  SizedBox(width: 4),
-                  Text('26/27 실시간', style: TextStyle(fontSize: 10.5, color: Colors.green, fontWeight: FontWeight.bold)),
-                ],
-              ),
+              child: const Text('26/27 시즌 코스', style: TextStyle(fontSize: 10.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
             ),
           ],
-        ),
-        const SizedBox(height: 10),
-
-        // 운용 상태 서머리 배지 바
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatusPill('🟢 오픈', '$openCount', Colors.green.shade700),
-              _buildDivider(),
-              _buildStatusPill('🟡 모굴', '$mogulCount', Colors.orange.shade800),
-              _buildDivider(),
-              _buildStatusPill('❄️ 파크', '$parkCount', Colors.purple.shade700),
-              _buildDivider(),
-              _buildStatusPill('🔴 미운영', '$closedCount', Colors.red.shade700),
-            ],
-          ),
         ),
         const SizedBox(height: 12),
 
@@ -6121,9 +6125,9 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
             }).toList(),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
-        // 깔끔한 슬로프 카드 목록
+        // 깔끔한 슬로프 제원 카드 목록
         ListView.separated(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -6137,11 +6141,7 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: slope.status == SlopeStatus.closed
-                      ? Colors.grey.shade300
-                      : (slope.status == SlopeStatus.mogul ? Colors.orange.shade200 : Colors.grey.shade200),
-                ),
+                border: Border.all(color: Colors.grey.shade200),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.02),
@@ -6150,72 +6150,51 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      // 난이도 배지
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: slope.difficulty.color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: slope.difficulty.color.withValues(alpha: 0.3)),
-                        ),
-                        child: Text(
-                          slope.difficulty.label,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.difficulty.color),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // 슬로프 이름
-                      Expanded(
-                        child: Text(
+                  // 난이도 배지
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: slope.difficulty.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: slope.difficulty.color.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      slope.difficulty.label,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.difficulty.color),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // 슬로프 이름 및 상세 제원
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
                           slope.name,
-                          style: TextStyle(
-                            fontSize: 14,
+                          style: const TextStyle(
+                            fontSize: 14.5,
                             fontWeight: FontWeight.bold,
-                            color: slope.status == SlopeStatus.closed ? Colors.grey : Colors.black87,
-                            decoration: slope.status == SlopeStatus.closed ? TextDecoration.lineThrough : null,
+                            color: Colors.black87,
                           ),
                         ),
-                      ),
-                      // 실시간 운용 상태 태그
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: slope.status.color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: slope.status.color.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        const SizedBox(height: 4),
+                        Row(
                           children: [
-                            Icon(slope.status.icon, size: 12, color: slope.status.color),
-                            const SizedBox(width: 4),
-                            Text(
-                              slope.status.label,
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: slope.status.color),
-                            ),
+                            if (slope.length.isNotEmpty) ...[
+                              Icon(Icons.straighten_rounded, size: 13, color: Colors.grey.shade500),
+                              const SizedBox(width: 3),
+                              Text(slope.length, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                              Text('  •  ', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+                            ],
+                            Icon(Icons.location_on_outlined, size: 13, color: Colors.grey.shade500),
+                            const SizedBox(width: 2),
+                            Text(slope.section, style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade600)),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      if (slope.length.isNotEmpty) ...[
-                        Icon(Icons.straighten_rounded, size: 13, color: Colors.grey.shade500),
-                        const SizedBox(width: 3),
-                        Text(slope.length, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
-                        Text('  •  ', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
                       ],
-                      Icon(Icons.location_on_outlined, size: 13, color: Colors.grey.shade500),
-                      const SizedBox(width: 2),
-                      Text(slope.section, style: TextStyle(fontSize: 11.5, color: Colors.blueGrey.shade600)),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -6224,20 +6203,6 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
         ),
       ],
     );
-  }
-
-  Widget _buildStatusPill(String title, String count, Color color) {
-    return Column(
-      children: [
-        Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87)),
-        const SizedBox(height: 2),
-        Text(count, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
-      ],
-    );
-  }
-
-  Widget _buildDivider() {
-    return Container(width: 1, height: 20, color: Colors.grey.shade300);
   }
 }
 
@@ -6737,17 +6702,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('취소', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
-                setState(() {
-                  gCurrentUser = null;
-                });
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                ).then((_) {
-                  if (mounted) setState(() {});
-                });
+                await AppFirebaseService.instance.signOut();
+                for (final p in gRidePosts) {
+                  p.isJoined = false;
+                  p.unreadCount = 0;
+                }
+                gRidePostsNotifier.value = List<RidePost>.from(gRidePosts);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('로그아웃되었습니다.'),
+                    backgroundColor: Colors.black87,
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2563EB),
@@ -8483,6 +8452,8 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
   }
 
   void _joinRide() {
+    if (!ensureUserLoggedIn(context, actionName: '모임에 참여')) return;
+
     if (gPostBanUntil != null && DateTime.now().isBefore(gPostBanUntil!)) {
       final remainingMin = gPostBanUntil!.difference(DateTime.now()).inMinutes;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -9027,6 +8998,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
     final text = _msgController.text.trim();
     if (text.isEmpty) return;
+    if (!ensureUserLoggedIn(context, actionName: '채팅 메시지를 전송')) return;
 
     // 🛡️ 금칙어 & 외부 링크 실시간 필터링
     final filterError = ContentFilterService.validate(text);
