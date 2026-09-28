@@ -1120,36 +1120,107 @@ class AppFirebaseService {
   // -------------------------------------------------------------
   // 5. 실시간 설질 한줄평 (`live_snow_comments` 컬렉션)
   // -------------------------------------------------------------
-  Stream<List<LiveSnowComment>> streamLiveSnowComments({String? resortId}) {
-    Query query = _firestore.collection('live_snow_comments').orderBy('createdAt', descending: true);
-    if (resortId != null && resortId.isNotEmpty && resortId != 'all') {
-      query = query.where('resortId', isEqualTo: resortId);
+  /// ❄️ 매일 새벽 03:00 (03:00 AM) 기준 설질 한줄평 피드 초기화 기준 시각 계산
+  /// - 현재 시각이 새벽 03:00 이전(00:00~02:59)이면: 전날 새벽 03:00 이후 작성된 글까지 유지 (야간/심야 라이딩 세션)
+  /// - 현재 시각이 새벽 03:00 이후(03:00~23:59)이면: 당일 새벽 03:00 이후 작성된 글만 표시
+  static DateTime getDailySnowCommentCutoffTime([DateTime? now]) {
+    final current = now ?? DateTime.now();
+    if (current.hour < 3) {
+      final yesterday = current.subtract(const Duration(days: 1));
+      return DateTime(yesterday.year, yesterday.month, yesterday.day, 3, 0, 0);
+    } else {
+      return DateTime(current.year, current.month, current.day, 3, 0, 0);
     }
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+  }
+
+  /// ⭐️ 1일 1회 설질 포인트(+50P) 적립 기준 시각 (매일 오전 08:00 초기화)
+  /// - 00:00~07:59: 전날 오전 08:00 이후 적립 내역 확인
+  /// - 08:00~23:59: 당일 오전 08:00 이후 적립 내역 확인
+  static DateTime getDailySnowPointCutoffTime([DateTime? now]) {
+    final current = now ?? DateTime.now();
+    if (current.hour < 8) {
+      final yesterday = current.subtract(const Duration(days: 1));
+      return DateTime(yesterday.year, yesterday.month, yesterday.day, 8, 0, 0);
+    } else {
+      return DateTime(current.year, current.month, current.day, 8, 0, 0);
+    }
+  }
+
+  /// ❄️ 설질 한줄평 작성 가능 시간 여부 확인 (새벽 03:00 ~ 08:00 슬로프 정비 시간 작성 불가)
+  static bool isSnowCommentWritable([DateTime? now]) {
+    final current = now ?? DateTime.now();
+    final hour = current.hour;
+    // 03:00 ~ 07:59 (새벽 3시부터 8시 직전까지) 작성 제한
+    return !(hour >= 3 && hour < 8);
+  }
+
+  Stream<List<LiveSnowComment>> streamLiveSnowComments({String? resortId}) {
+    return _firestore
+        .collection('live_snow_comments')
+        .snapshots()
+        .map((snapshot) {
+      final cutoffTime = getDailySnowCommentCutoffTime();
+      final list = snapshot.docs.map((doc) {
+        final data = doc.data();
         DateTime created = DateTime.now();
         if (data['createdAt'] is Timestamp) {
           created = (data['createdAt'] as Timestamp).toDate();
         }
         return LiveSnowComment(
           id: doc.id,
-          resortId: data['resortId'] ?? '',
-          resortName: data['resortName'] ?? '',
-          authorName: data['authorName'] ?? '익명의 라이더',
-          authorUid: data['authorUid'],
-          content: data['content'] ?? '',
-          snowCondition: data['snowCondition'] ?? '양호/양설',
-          snowConditionEmoji: data['snowConditionEmoji'] ?? '✨',
+          resortId: (data['resortId'] ?? '').toString(),
+          resortName: (data['resortName'] ?? '').toString(),
+          authorName: (data['authorName'] ?? '익명의 라이더').toString(),
+          authorUid: data['authorUid']?.toString(),
+          content: (data['content'] ?? '').toString(),
+          snowCondition: (data['snowCondition'] ?? '양호/양설').toString(),
+          snowConditionEmoji: (data['snowConditionEmoji'] ?? '✨').toString(),
           createdAt: created,
           likes: (data['likes'] ?? 0) as int,
           likedUserNames: List<String>.from(data['likedUserNames'] ?? []),
         );
+      }).where((comment) {
+        // ❄️ 새벽 03:00 이전의 이전 날짜 한줄평은 목록에서 제외 (새벽 03:00 정각 자동 초기화)
+        if (comment.createdAt.isBefore(cutoffTime)) {
+          return false;
+        }
+
+        // 내 글은 항상 표시
+        final isMyComment = gCurrentUser != null &&
+            comment.authorUid != null &&
+            comment.authorUid == gCurrentUser!.id;
+
+        // 차단된 유저 필터링
+        if (!isMyComment && gCurrentUser != null) {
+          if (comment.authorUid != null &&
+              comment.authorUid!.isNotEmpty &&
+              gCurrentUser!.isUserBlocked(comment.authorUid!, uid: comment.authorUid)) {
+            return false;
+          }
+        }
+
+        // 스키장 ID / 이름 필터링
+        if (resortId != null && resortId.isNotEmpty && resortId != 'all') {
+          final target = resortId.toLowerCase();
+          final rId = comment.resortId.toLowerCase();
+          final rName = comment.resortName.toLowerCase();
+          final matches = rId == target || rId.contains(target) || rName.contains(target) || target.contains(rId);
+          if (!matches) return false;
+        }
+
+        return true;
       }).toList();
+
+      // 최신순 정렬
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 
   Future<bool> addLiveSnowComment(LiveSnowComment comment) async {
+    if (!isSnowCommentWritable()) {
+      throw Exception('새벽 슬로프 정비 시간(03:00~08:00)에는 설질 한줄평을 작성할 수 없습니다.');
+    }
     try {
       await _firestore.collection('live_snow_comments').add({
         'resortId': comment.resortId,
@@ -1164,7 +1235,7 @@ class AppFirebaseService {
         'likedUserNames': [],
       });
 
-      // 🎁 설질 한줄평 작성 시 1일 1회에 한해 +50 스노우 포인트 지급 (어뷰징/도배 방지)
+      // 🎁 설질 한줄평 작성 시 1일 1회에 한해 +50 스노우 포인트 지급 (매일 오전 08:00 초기화)
       bool awardedPoint = false;
       if (gCurrentUser != null) {
         if (!gCurrentUser!.hasEarnedSnowPointToday) {

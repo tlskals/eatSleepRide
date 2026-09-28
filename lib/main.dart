@@ -33,7 +33,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '같이 타요',
+      title: '같이타요',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -489,10 +489,8 @@ class UserProfile {
 
   bool get hasEarnedSnowPointToday {
     if (lastSnowPointDate == null) return false;
-    final now = DateTime.now();
-    return lastSnowPointDate!.year == now.year &&
-        lastSnowPointDate!.month == now.month &&
-        lastSnowPointDate!.day == now.day;
+    final cutoff = AppFirebaseService.getDailySnowPointCutoffTime();
+    return lastSnowPointDate!.isAfter(cutoff);
   }
 
   UserProfile({
@@ -1673,7 +1671,7 @@ class _MainScreenState extends State<MainScreen> {
           NavigationDestination(
             icon: Icon(Icons.snowboarding_outlined),
             selectedIcon: Icon(Icons.snowboarding_rounded),
-            label: '같이 타요',
+            label: '같이타요',
           ),
           NavigationDestination(
             icon: Icon(Icons.landscape_outlined),
@@ -1941,14 +1939,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   visualDensity: VisualDensity.compact,
                 ),
-                onPressed: _showWriteLiveSnowCommentDialog,
+                onPressed: () {
+                  if (!AppFirebaseService.isSnowCommentWritable()) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFF1E293B),
+                        content: Row(
+                          children: [
+                            Icon(Icons.schedule_rounded, color: Colors.amberAccent, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text('새벽 슬로프 정비 시간(03:00~08:00)에는 작성이 제한됩니다. 오전 08:00 이후에 이용해주세요! ❄️'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  _showWriteLiveSnowCommentDialog();
+                },
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.edit_note_rounded, size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      hasEarnedToday ? '한줄평 작성 (완료)' : '한줄평 작성',
+                      !AppFirebaseService.isSnowCommentWritable()
+                          ? '정비중 (03~08시)'
+                          : (hasEarnedToday ? '한줄평 작성 (완료)' : '한줄평 작성'),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -2129,6 +2148,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showWriteLiveSnowCommentDialog() {
     if (!ensureUserLoggedIn(context, actionName: '설질 한줄평을 작성')) return;
+
+    if (!AppFirebaseService.isSnowCommentWritable()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              Icon(Icons.schedule_rounded, color: Colors.amberAccent, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('새벽 슬로프 정비 시간(03:00~08:00)에는 설질 한줄평을 작성할 수 없습니다. 오전 08:00 이후에 이용해주세요! ❄️'),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
 
     final controller = TextEditingController();
     String selectedCondition = '양호/양설';
@@ -2414,7 +2451,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '실시간 같이 타요 모집 🏂',
+                  '실시간 같이타요 모집 🏂',
                   style: TextStyle(fontSize: 17.5, fontWeight: FontWeight.bold, color: Colors.black87),
                 ),
                 const SizedBox(height: 2),
@@ -2869,7 +2906,7 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
                     children: [
                       Icon(Icons.group_rounded, size: 16),
                       SizedBox(width: 5),
-                      Text('같이 타요'),
+                      Text('같이타요'),
                     ],
                   ),
                 ),
@@ -6610,6 +6647,24 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
   Future<void> _submitComment() async {
     if (!ensureUserLoggedIn(context, actionName: '설질 한줄평을 등록')) return;
 
+    if (!AppFirebaseService.isSnowCommentWritable()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF1E293B),
+          content: Row(
+            children: [
+              Icon(Icons.schedule_rounded, color: Colors.amberAccent, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('새벽 슬로프 정비 시간(03:00~08:00)에는 설질 한줄평을 작성할 수 없습니다. 오전 08:00 이후에 이용해주세요! ❄️'),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
     final text = _commentController.text.trim();
     if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6758,7 +6813,7 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '매일 자정 갱신되는 오늘 라이더들의 생생한 슬로프 평가',
+                          '매일 갱신되는 오늘 라이더들의 생생한 슬로프 평가',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade600,
@@ -6813,7 +6868,34 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                     ),
                     const SizedBox(height: 10),
 
-                    // 태그 칩 선택
+                    if (!AppFirebaseService.isSnowCommentWritable()) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.schedule_rounded, size: 16, color: Color(0xFF64748B)),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '새벽 슬로프 정비 시간(03:00~08:00)에는 작성이 잠시 중단됩니다. 오전 08:00에 새롭게 오픈됩니다! ❄️',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Color(0xFF475569),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      // 태그 칩 선택
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -6904,7 +6986,8 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                       ],
                     ),
                   ],
-                ),
+                ],
+              ),
               ),
               const SizedBox(height: 12),
 
@@ -9075,6 +9158,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(
+            leading: const Icon(Icons.description_outlined, color: Color(0xFF2563EB)),
+            title: const Text('서비스 이용약관 (EULA)', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+            subtitle: const Text('무관용 원칙 및 커뮤니티 안전 정책', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            onTap: () => showAppTermsDialog(context),
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined, color: Color(0xFF2563EB)),
+            title: const Text('개인정보 처리방침', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+            trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            onTap: () => showAppPrivacyDialog(context),
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF0284C7)),
+            title: const Text('고객지원 및 불량 유저 제보', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+            subtitle: const Text('ridetogetherrr@gmail.com (24시간 이내 조치)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+            trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.support_agent_rounded, color: Color(0xFF2563EB)),
+                      SizedBox(width: 8),
+                      Text('고객지원 및 신고 안내', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  content: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '부적절한 게시글이나 불량 이용자를 발견하셨을 경우, 게시글 내 [신고] 버튼을 이용하시거나 아래 이메일로 제보해 주시기 바랍니다.',
+                        style: TextStyle(fontSize: 13, height: 1.45),
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        '📧 고객지원/신고 이메일: ridetogetherrr@gmail.com\n⏰ 처리 방침: 접수 후 24시간 이내 콘텐츠 삭제 및 계정 제재',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF1E3A8A)),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('확인', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
             leading: const Icon(Icons.logout_rounded, color: Colors.grey),
             title: const Text('로그아웃', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.black87)),
             onTap: _logout,
@@ -9090,6 +9231,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+// -------------------------------------------------------------
+// 이용약관(EULA) & 개인정보 처리방침 공용 모달 다이얼로그
+// -------------------------------------------------------------
+void showAppTermsDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Row(
+        children: [
+          Icon(Icons.description_outlined, color: Color(0xFF2563EB)),
+          SizedBox(width: 8),
+          Text('서비스 이용약관 (EULA)', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 380,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '부적절한 콘텐츠 및 악성 이용자에 대한 무관용 원칙 (Zero-Tolerance Policy)\n욕설, 음란, 비방, 불법 행위 적발 시 사전 경고 없이 즉각 삭제 및 계정이 영구 정지됩니다.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFF991B1B), fontWeight: FontWeight.w600, height: 1.35),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '1. 커뮤니티 안전 정책 및 UGC 규정 (Apple 가이드라인 1.2 준수)\n'
+                '• 본 서비스는 건전하고 안전한 라이딩 커뮤니티 조성을 위해 부적절한 콘텐츠에 대한 무관용 원칙을 적용합니다.\n'
+                '• 음란물, 불법 도박, 타인에 대한 욕설/비하/성희롱, 외부 연락처 유도 등은 일체 금지됩니다.\n\n'
+                '2. 실시간 방어 및 제재 시스템\n'
+                '• 금칙어 실시간 필터링: 모집글 및 채팅 작성 시 도박/음란 키워드는 즉각 차단됩니다.\n'
+                '• 원터치 차단 및 신고: 부적절한 글이나 유저는 원클릭으로 즉시 차단/신고할 수 있으며, 차단 즉시 화면에서 숨김 처리됩니다.\n'
+                '• 24시간 내 신속 조치: 접수된 모든 신고는 24시간 이내에 검토하여 콘텐츠 삭제 및 영구 계정 제재 조치가 취해집니다.\n\n'
+                '3. 고객지원 및 불량 유저 신고처\n'
+                '• 고객지원 이메일: ridetogetherrr@gmail.com\n'
+                '• 공식 저장소: https://github.com/tlskals/eatSleepRide',
+                style: TextStyle(fontSize: 12, height: 1.5, color: Colors.black87),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2563EB),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('확인 및 동의', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+}
+
+void showAppPrivacyDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Row(
+        children: [
+          Icon(Icons.privacy_tip_outlined, color: Color(0xFF2563EB)),
+          SizedBox(width: 8),
+          Text('개인정보 처리방침', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: const SizedBox(
+        width: double.maxFinite,
+        height: 380,
+        child: SingleChildScrollView(
+          child: Text(
+            '같이타요(Eat Sleep Ride)는 이용자의 소중한 개인정보를 보호하며, 관련 법령 및 Apple 개인정보 보호 가이드라인을 철저히 준수합니다.\n\n'
+            '1. 수집 항목 및 방법\n'
+            '• 소셜 인증(Apple, Google, Kakao, Naver)을 통한 고유 식별자(UID), 이메일, 닉네임만 수집하며 주민번호, 실명, 전화번호는 수집하지 않습니다.\n\n'
+            '2. 이용 목적\n'
+            '• 회원 식별, 스키장 동행 매칭 및 실시간 단체 채팅 서비스 제공, 푸시 알림 발송.\n\n'
+            '3. 인앱 회원탈퇴 및 즉시 영구 파기 (가이드라인 5.1.1(v))\n'
+            '• 이용자는 앱 내 [계정 설정] > [회원탈퇴]를 통해 언제든지 즉시 계정 및 모든 활동 데이터를 영구 삭제할 수 있습니다.\n\n'
+            '4. 개인정보 보호 책임자 및 문의\n'
+            '• 이메일: ridetogetherrr@gmail.com',
+            style: TextStyle(fontSize: 12, height: 1.5, color: Colors.black87),
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2563EB),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('확인', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
 }
 
 // -------------------------------------------------------------
@@ -9258,30 +9518,64 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
 
-              // 보안 & 100% 익명성 안내
+              // EULA & 커뮤니티 안전 정책 및 무관용 원칙 고지
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    const Icon(Icons.shield_outlined, color: Colors.amber, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '100% 익명 보장: 실명/연락처는 타인에게 공개되지 않습니다.',
-                        style: TextStyle(fontSize: 11, color: Colors.blue.shade100),
-                      ),
+                    Text(
+                      '로그인 시 이용약관(EULA) 및 개인정보 처리방침에 동의하게 됩니다.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: Colors.blue.shade100, height: 1.35),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '⚠️ 부적절한 콘텐츠 및 악성 이용자는 무관용 원칙(Zero-Tolerance)에 따라 즉시 삭제 및 영구 이용 정지됩니다.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 10, color: Colors.amber.shade200, height: 1.35),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        InkWell(
+                          onTap: () => showAppTermsDialog(context),
+                          child: const Text(
+                            '이용약관(EULA) 보기',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF93C5FD),
+                              decoration: TextDecoration.underline,
+                              decorationColor: Color(0xFF93C5FD),
+                            ),
+                          ),
+                        ),
+                        Text('  •  ', style: TextStyle(color: Colors.blue.shade300, fontSize: 10)),
+                        InkWell(
+                          onTap: () => showAppPrivacyDialog(context),
+                          child: const Text(
+                            '개인정보 처리방침 보기',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF93C5FD),
+                              decoration: TextDecoration.underline,
+                              decorationColor: Color(0xFF93C5FD),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
             ],
           ),
         ),
@@ -11164,7 +11458,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('같이 타요 글쓰기'),
+        title: const Text('같이타요 글쓰기'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12.0),
