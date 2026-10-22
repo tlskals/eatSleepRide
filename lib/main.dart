@@ -248,38 +248,6 @@ class DetailedSlope {
   });
 
   String get displayName => '$name (${difficulty.label})';
-
-  double get effectiveMapX {
-    if (mapX != 0.5) return mapX;
-    final h = (name.hashCode.abs() % 100) / 100.0;
-    if (section.contains('불새마루') || section.contains('초급') || section.contains('알파') || section.contains('마운틴') || section.contains('드림')) {
-      return 0.20 + h * 0.22;
-    } else if (section.contains('중급') || section.contains('브라보') || section.contains('헤라') || section.contains('글로리')) {
-      return 0.42 + h * 0.18;
-    } else if (section.contains('익스트림') || section.contains('파크')) {
-      return 0.35 + h * 0.25;
-    } else {
-      return 0.62 + h * 0.22;
-    }
-  }
-
-  double get effectiveMapY {
-    if (mapY != 0.5) return mapY;
-    final h = ((name.length * 31).hashCode.abs() % 100) / 100.0;
-    if (difficulty == SlopeDifficulty.beginner) {
-      return 0.72 + h * 0.12;
-    } else if (difficulty == SlopeDifficulty.novice) {
-      return 0.62 + h * 0.12;
-    } else if (difficulty == SlopeDifficulty.intermediate) {
-      return 0.45 + h * 0.14;
-    } else if (difficulty == SlopeDifficulty.advanced) {
-      return 0.30 + h * 0.14;
-    } else if (difficulty == SlopeDifficulty.park) {
-      return 0.65 + h * 0.12;
-    } else {
-      return 0.16 + h * 0.14;
-    }
-  }
 }
 
 class SkiResort {
@@ -481,7 +449,6 @@ class UserProfile {
   int taggedReviewsCount; // 태그/작성된 후기 개수
   int snowPoints; // 슬로프 파우더 포인트
   String riderTitle; // 라이더 등급/칭호
-  List<RiderBadge> badges; // 획득 배지 목록
   List<String> blockedUsers; // 차단한 사용자 닉네임 목록
   bool eventNotification; // 🎁 시즌 이벤트 및 혜택 알림 수신 동의 여부 (정보통신망법)
   DateTime? eventConsentDate; // 수신 동의/변경 일시
@@ -491,6 +458,69 @@ class UserProfile {
     if (lastSnowPointDate == null) return false;
     final cutoff = AppFirebaseService.getDailySnowPointCutoffTime();
     return lastSnowPointDate!.isAfter(cutoff);
+  }
+
+  /// 🎖️ 동행 성사 횟수(completedRidesCount) 및 설질 포인트(snowPoints) 기준 실시간 자동 언락 뱃지
+  List<RiderBadge> get badges => [
+    RiderBadge(
+      id: 'first_ride',
+      title: '첫 동행 성사',
+      emoji: '⛷️',
+      description: '첫 같이타요 슬로프 동행 1회 완료 시 획득',
+      isUnlocked: completedRidesCount >= 1,
+      unlockedDate: completedRidesCount >= 1 ? '조건 달성' : '미획득',
+    ),
+    RiderBadge(
+      id: 'ride_veteran',
+      title: '동행 베테랑',
+      emoji: '🏂',
+      description: '슬로프 동행 3회 이상 완료 시 획득',
+      isUnlocked: completedRidesCount >= 3,
+      unlockedDate: completedRidesCount >= 3 ? '조건 달성' : '미획득',
+    ),
+    RiderBadge(
+      id: 'ride_master',
+      title: '슬로프 마스터',
+      emoji: '🏆',
+      description: '슬로프 동행 5회 이상 완료 시 획득',
+      isUnlocked: completedRidesCount >= 5,
+      unlockedDate: completedRidesCount >= 5 ? '조건 달성' : '미획득',
+    ),
+    RiderBadge(
+      id: 'powder_sprout',
+      title: '설질 새싹',
+      emoji: '❄️',
+      description: '설질 포인트 50P 이상 달성 시 획득',
+      isUnlocked: snowPoints >= 50,
+      unlockedDate: snowPoints >= 50 ? '조건 달성' : '미획득',
+    ),
+    RiderBadge(
+      id: 'powder_collector',
+      title: '파우더 수집가',
+      emoji: '✨',
+      description: '설질 포인트 150P 이상 달성 시 획득',
+      isUnlocked: snowPoints >= 150,
+      unlockedDate: snowPoints >= 150 ? '조건 달성' : '미획득',
+    ),
+    RiderBadge(
+      id: 'powder_ambassador',
+      title: '설질 앰버서더',
+      emoji: '👑',
+      description: '설질 포인트 300P 이상 달성 시 획득',
+      isUnlocked: snowPoints >= 300,
+      unlockedDate: snowPoints >= 300 ? '조건 달성' : '미획득',
+    ),
+  ];
+
+  String get effectiveRiderTitle {
+    if (completedRidesCount >= 5 || snowPoints >= 300) {
+      return '골드 마스터 🏆';
+    } else if (completedRidesCount >= 3 || snowPoints >= 150) {
+      return '실버 라이더 🏂';
+    } else if (completedRidesCount >= 1 || snowPoints >= 50) {
+      return '슬로프 라이더 ⛷️';
+    }
+    return riderTitle.isNotEmpty ? riderTitle : '비기너 라이더 🏂';
   }
 
   UserProfile({
@@ -505,49 +535,13 @@ class UserProfile {
     this.completedRidesCount = 0,
     this.taggedReviewsCount = 0,
     this.snowPoints = 0,
-    this.riderTitle = '비기너 라이더 🏂',
+    String? riderTitle,
     List<RiderBadge>? badges,
     List<String>? blockedUsers,
     this.eventNotification = true,
     this.eventConsentDate,
     this.lastSnowPointDate,
-  })  : badges = badges ?? [
-          const RiderBadge(
-            id: 'first_ride',
-            title: '첫 동행 성사',
-            emoji: '⛷️',
-            description: '첫 같이타요 슬로프 동행을 마쳤어요',
-            isUnlocked: false,
-          ),
-          const RiderBadge(
-            id: 'random_master',
-            title: '4인 매칭 마스터',
-            emoji: '⚡️',
-            description: '4인 랜덤 매칭을 3회 이상 완료했어요',
-            isUnlocked: false,
-          ),
-          const RiderBadge(
-            id: 'night_rider',
-            title: '야간 라이더',
-            emoji: '🌙',
-            description: '야간/심야 슬로프 동행을 완료했어요',
-            isUnlocked: false,
-          ),
-          const RiderBadge(
-            id: 'manner_king',
-            title: '매너왕 메이트',
-            emoji: '👑',
-            description: '슬로프 매너왕이 되어보세요',
-            isUnlocked: false,
-          ),
-          const RiderBadge(
-            id: 'all_resorts',
-            title: '전국 정복자',
-            emoji: '🏔️',
-            description: '전국 5개 이상 스키장에서 동행 시 획득',
-            isUnlocked: false,
-          ),
-        ],
+  })  : riderTitle = riderTitle ?? '비기너 라이더 🏂',
         blockedUsers = blockedUsers ?? [];
 
   String get disciplineAvatarAsset {
@@ -1183,15 +1177,15 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.snowboarding_rounded,
     themeColor: Color(0xFF1E40AF),
     detailedSlopes: [
-      DetailedSlope(name: '하늬', section: '베이스/초급', difficulty: SlopeDifficulty.beginner, length: '460m', note: '초심자 전용 와이드 슬로프'),
-      DetailedSlope(name: '휘슬', section: '초중급', difficulty: SlopeDifficulty.novice, length: '850m', note: '완만하고 넓은 초중급 코스'),
-      DetailedSlope(name: '와이낫 (Why Not)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '750m', note: '곤지암 대표 중급 카빙'),
-      DetailedSlope(name: '그램 (Gram)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '680m', note: '다이나믹 롤러코스터 지형'),
-      DetailedSlope(name: '윈디 (Windy)', section: '정상/중상급', difficulty: SlopeDifficulty.advanced, length: '1,429m', note: '정상 쉼터 뷰 & 롱 크루징'),
-      DetailedSlope(name: '제타 1 (Zeta 1)', section: '정상/상급', difficulty: SlopeDifficulty.expert, length: '980m', note: '상급 인터스키 기술선수권 코스'),
-      DetailedSlope(name: '제타 2 (Zeta 2)', section: '상급', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m', note: '모굴 전용 라인'),
-      DetailedSlope(name: '게일 (Gale)', section: '정상/최상급', difficulty: SlopeDifficulty.extreme, length: '1,050m', note: '곤지암 최고 경사 절벽 사면'),
-      DetailedSlope(name: '곤지암 펀파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m', note: '웨이브 & 비기너 키커 존'),
+      DetailedSlope(name: '하늬', section: '베이스/초급', difficulty: SlopeDifficulty.beginner, length: '460m'),
+      DetailedSlope(name: '휘슬', section: '초중급', difficulty: SlopeDifficulty.novice, length: '850m'),
+      DetailedSlope(name: '와이낫 (Why Not)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '750m'),
+      DetailedSlope(name: '그램 (Gram)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '680m'),
+      DetailedSlope(name: '윈디 (Windy)', section: '정상/중상급', difficulty: SlopeDifficulty.advanced, length: '1,429m'),
+      DetailedSlope(name: '제타 1 (Zeta 1)', section: '정상/상급', difficulty: SlopeDifficulty.expert, length: '980m'),
+      DetailedSlope(name: '제타 2 (Zeta 2)', section: '상급', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m'),
+      DetailedSlope(name: '게일 (Gale)', section: '정상/최상급', difficulty: SlopeDifficulty.extreme, length: '1,050m'),
+      DetailedSlope(name: '곤지암 펀파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~02)'],
     webcams: [
@@ -1239,21 +1233,21 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.landscape_rounded,
     themeColor: Color(0xFF0D9488),
     detailedSlopes: [
-      DetailedSlope(name: '레인보우 파라다이스', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.novice, length: '5,600m', note: '국내 최장 힐링 롱코스 파노라마'),
-      DetailedSlope(name: '레인보우 1 (골드)', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,200m', note: '월드컵 알파인 공인 레이스 코스'),
-      DetailedSlope(name: '레인보우 2', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,150m', note: '레인보우 메인 급경사 직벽'),
-      DetailedSlope(name: '레인보우 3', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '1,050m', note: '대한민국 봄 시즌 모굴의 성지'),
-      DetailedSlope(name: '레인보우 4', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,300m', note: '파우더 설질 & 테크니컬'),
-      DetailedSlope(name: '골드밸리', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,655m', note: '용평 최고의 인터스키 고속 카빙'),
-      DetailedSlope(name: '골드파라다이스', section: '골드 구역', difficulty: SlopeDifficulty.intermediate, length: '1,450m', note: '쾌적하고 넓은 와이드 중급'),
-      DetailedSlope(name: '골드환타지', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,200m', note: '골드 리프트 상단 롤러코스터'),
-      DetailedSlope(name: '레드 (Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '950m', note: '야간 메인 상급 슬로프 & 카빙'),
-      DetailedSlope(name: '뉴레드 (New Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '레드 리프트 좌측 급사면'),
-      DetailedSlope(name: '실버 (Silver)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,000m', note: '자연설 파우더 구역'),
-      DetailedSlope(name: '메가그린 (Mega Green)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '700m', note: '국내 최대 폭 180m 광폭 슬로프'),
-      DetailedSlope(name: '핑크 (Pink)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '650m', note: '초중급 롱턴 & 숏턴 연습'),
-      DetailedSlope(name: '옐로우 (Yellow)', section: '베이스 구역', difficulty: SlopeDifficulty.beginner, length: '550m', note: '비기너 강습 전용'),
-      DetailedSlope(name: '드래곤 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m', note: '지빙 기물 & 미니 키커'),
+      DetailedSlope(name: '레인보우 파라다이스', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.novice, length: '5,600m'),
+      DetailedSlope(name: '레인보우 1 (골드)', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,200m'),
+      DetailedSlope(name: '레인보우 2', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,150m'),
+      DetailedSlope(name: '레인보우 3', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '1,050m'),
+      DetailedSlope(name: '레인보우 4', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,300m'),
+      DetailedSlope(name: '골드밸리', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,655m'),
+      DetailedSlope(name: '골드파라다이스', section: '골드 구역', difficulty: SlopeDifficulty.intermediate, length: '1,450m'),
+      DetailedSlope(name: '골드환타지', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,200m'),
+      DetailedSlope(name: '레드 (Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '950m'),
+      DetailedSlope(name: '뉴레드 (New Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '850m'),
+      DetailedSlope(name: '실버 (Silver)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,000m'),
+      DetailedSlope(name: '메가그린 (Mega Green)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '700m'),
+      DetailedSlope(name: '핑크 (Pink)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '650m'),
+      DetailedSlope(name: '옐로우 (Yellow)', section: '베이스 구역', difficulty: SlopeDifficulty.beginner, length: '550m'),
+      DetailedSlope(name: '드래곤 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (19:00~22:00)'],
     webcams: [
@@ -1272,21 +1266,21 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.ac_unit_rounded,
     themeColor: Color(0xFF16A34A),
     detailedSlopes: [
-      DetailedSlope(name: '불새마루 도도 (Dodo)', section: '불새마루 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m', note: '스노우보더 인기 카빙 명소'),
-      DetailedSlope(name: '불새마루 듀크 (Duke)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '950m', note: '중급 턴 & 엣징 연습'),
-      DetailedSlope(name: '불새마루 키위 (Kiwi)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '750m', note: '불새마루 우회 코스'),
-      DetailedSlope(name: '스패로우 (Sparrow)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '920m', note: '넓은 폭의 완만한 초급 코스'),
-      DetailedSlope(name: '펭귄 (Penguin)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '650m', note: '메인 스키하우스 베이스 직결'),
-      DetailedSlope(name: '호크 1 (Hawk 1)', section: '불새마루 구역', difficulty: SlopeDifficulty.novice, length: '1,050m', note: '휘팍 최고의 야간 라이딩 명소'),
-      DetailedSlope(name: '호크 2 (Hawk 2)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '800m', note: '호크 리프트 직하강 중급'),
-      DetailedSlope(name: '파노라마 (Panorama)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.novice, length: '2,400m', note: '몽블랑에서 베이스까지 2.4km 파노라마'),
-      DetailedSlope(name: '챔피온 (Champion)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '1,000m', note: '정통 알파인 급경사 카빙'),
-      DetailedSlope(name: '디지 (Dizzy)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.extreme, length: '850m', note: '휘닉스 최고 난이도 직벽 사면'),
-      DetailedSlope(name: '밸리 (Valley)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.advanced, length: '1,120m', note: '몽블랑에서 밸리로 이어지는 다운힐'),
-      DetailedSlope(name: '환타지아 (Fantasia)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '900m', note: '정상 쉼터 우측 테크니컬'),
-      DetailedSlope(name: '슬로프스타일 (익스트림 파크)', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '600m', note: '국내 1위 익스트림 파크 키커 & 지빙 레일'),
-      DetailedSlope(name: '슈퍼 하프파이프', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '160m', note: '국제 규격 높이 6.8m 슈퍼파이프'),
-      DetailedSlope(name: '펀파크 & 웨이브존', section: '익스트림 파크', difficulty: SlopeDifficulty.novice, status: SlopeStatus.park, length: '450m', note: '초중급자 파크 입문 및 뱅크드 슬라럼'),
+      DetailedSlope(name: '불새마루 도도 (Dodo)', section: '불새마루 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m'),
+      DetailedSlope(name: '불새마루 듀크 (Duke)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '950m'),
+      DetailedSlope(name: '불새마루 키위 (Kiwi)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '750m'),
+      DetailedSlope(name: '스패로우 (Sparrow)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '920m'),
+      DetailedSlope(name: '펭귄 (Penguin)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '650m'),
+      DetailedSlope(name: '호크 1 (Hawk 1)', section: '불새마루 구역', difficulty: SlopeDifficulty.novice, length: '1,050m'),
+      DetailedSlope(name: '호크 2 (Hawk 2)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '800m'),
+      DetailedSlope(name: '파노라마 (Panorama)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.novice, length: '2,400m'),
+      DetailedSlope(name: '챔피온 (Champion)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '1,000m'),
+      DetailedSlope(name: '디지 (Dizzy)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.extreme, length: '850m'),
+      DetailedSlope(name: '밸리 (Valley)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.advanced, length: '1,120m'),
+      DetailedSlope(name: '환타지아 (Fantasia)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '900m'),
+      DetailedSlope(name: '슬로프스타일 (익스트림 파크)', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '600m'),
+      DetailedSlope(name: '슈퍼 하프파이프', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '160m'),
+      DetailedSlope(name: '펀파크 & 웨이브존', section: '익스트림 파크', difficulty: SlopeDifficulty.novice, status: SlopeStatus.park, length: '450m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~24)'],
     webcams: [
@@ -1305,23 +1299,23 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.terrain_rounded,
     themeColor: Color(0xFF6B21A8),
     detailedSlopes: [
-      DetailedSlope(name: '빅토리아 1', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, length: '1,439m', note: '하이원 최고 경사 절벽 카빙 사면'),
-      DetailedSlope(name: '빅토리아 2', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '1,300m', note: '상단 모굴 전용 코스'),
-      DetailedSlope(name: '빅토리아 3', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.closed, length: '1,150m', note: '영구 폐쇄 / 미운영 (안전 사유)'),
-      DetailedSlope(name: '헤라 1', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.intermediate, length: '1,504m', note: '마운틴탑~허브 최고의 광폭 크루징'),
-      DetailedSlope(name: '헤라 2', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.advanced, status: SlopeStatus.mogul, length: '1,230m', note: '시즌 후반 모굴 & 테크니컬 전용 운영'),
-      DetailedSlope(name: '헤라 3', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,100m', note: '헤라 리프트 상단 급사면'),
-      DetailedSlope(name: '아폴로 1', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,803m', note: '밸리탑 직벽 레이스 코스'),
-      DetailedSlope(name: '아폴로 2', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,250m', note: '밸리허브 연결 상급 코스'),
-      DetailedSlope(name: '아폴로 3', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.advanced, length: '1,400m', note: '아폴로 리프트 연결 중상급'),
-      DetailedSlope(name: '아폴로 4', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,550m', note: '스프링 시즌 마지막까지 단독 오픈하는 전설의 슬로프'),
-      DetailedSlope(name: '아폴로 6', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,180m', note: '밸리콘도 직결로'),
-      DetailedSlope(name: '아테나 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,700m', note: '마운틴탑~마운틴허브 완만코스'),
-      DetailedSlope(name: '아테나 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.novice, length: '1,670m', note: '마운틴허브~마운틴베이스 롱코스'),
-      DetailedSlope(name: '아테나 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,200m', note: '마운틴베이스 연결 코스'),
-      DetailedSlope(name: '제우스 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '2,329m', note: '밸리탑~밸리허브 롱코스 초보자 천국'),
-      DetailedSlope(name: '제우스 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,840m', note: '밸리허브~밸리베이스 광폭 슬로프'),
-      DetailedSlope(name: '제우스 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,020m', note: '제우스 우회 완경사'),
+      DetailedSlope(name: '빅토리아 1', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, length: '1,439m'),
+      DetailedSlope(name: '빅토리아 2', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '1,300m'),
+      DetailedSlope(name: '빅토리아 3', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.closed, length: '1,150m'),
+      DetailedSlope(name: '헤라 1', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.intermediate, length: '1,504m'),
+      DetailedSlope(name: '헤라 2', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.advanced, status: SlopeStatus.mogul, length: '1,230m'),
+      DetailedSlope(name: '헤라 3', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,100m'),
+      DetailedSlope(name: '아폴로 1', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,803m'),
+      DetailedSlope(name: '아폴로 2', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,250m'),
+      DetailedSlope(name: '아폴로 3', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.advanced, length: '1,400m'),
+      DetailedSlope(name: '아폴로 4', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,550m'),
+      DetailedSlope(name: '아폴로 6', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,180m'),
+      DetailedSlope(name: '아테나 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,700m'),
+      DetailedSlope(name: '아테나 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.novice, length: '1,670m'),
+      DetailedSlope(name: '아테나 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,200m'),
+      DetailedSlope(name: '제우스 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '2,329m'),
+      DetailedSlope(name: '제우스 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,840m'),
+      DetailedSlope(name: '제우스 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,020m'),
     ],
     availableTimeSlots: ['주간 (09~16)', '오후 (12~16)', '야간 (18~22)'],
     webcams: [
@@ -1340,15 +1334,15 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.snowshoeing_rounded,
     themeColor: Color(0xFF0F766E),
     detailedSlopes: [
-      DetailedSlope(name: '알파 1 (A1)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '700m', note: '메인 베이스 초급 코스'),
-      DetailedSlope(name: '알파 2, 3 (A2/A3)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '600m', note: '초보 연습 전용'),
-      DetailedSlope(name: '브라보 1 (B1)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m', note: '웰리힐리 대표 고속 카빙 슬로프'),
-      DetailedSlope(name: '브라보 2 (B2)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '950m', note: '브라보 리프트 상단 와이드'),
-      DetailedSlope(name: '에코 1, 2 (E1/E2)', section: '에코 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '술이봉 곤돌라 하단 연결'),
-      DetailedSlope(name: '챌린지 1, 2 (C1/C2)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '상급 인터스키 게렌데'),
-      DetailedSlope(name: '챌린지 4, 5 (C4/C5)', section: '챌린지 구역', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '950m', note: 'C5 모굴 라인 & 급경사'),
-      DetailedSlope(name: '스타익스프레스', section: '관광 롱코스', difficulty: SlopeDifficulty.novice, length: '2,100m', note: '술이봉 정상에서 이어지는 2.1km 롱코스'),
-      DetailedSlope(name: '웰리 펀파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '650m', note: '국내 최장 규모 펀파크 키커 & 지빙 라인'),
+      DetailedSlope(name: '알파 1 (A1)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '700m'),
+      DetailedSlope(name: '알파 2, 3 (A2/A3)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '600m'),
+      DetailedSlope(name: '브라보 1 (B1)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m'),
+      DetailedSlope(name: '브라보 2 (B2)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '950m'),
+      DetailedSlope(name: '에코 1, 2 (E1/E2)', section: '에코 구역', difficulty: SlopeDifficulty.intermediate, length: '900m'),
+      DetailedSlope(name: '챌린지 1, 2 (C1/C2)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '850m'),
+      DetailedSlope(name: '챌린지 4, 5 (C4/C5)', section: '챌린지 구역', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '950m'),
+      DetailedSlope(name: '스타익스프레스', section: '관광 롱코스', difficulty: SlopeDifficulty.novice, length: '2,100m'),
+      DetailedSlope(name: '웰리 펀파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '650m'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (22:30~24:00)'],
     webcams: [
@@ -1367,14 +1361,14 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.forest_rounded,
     themeColor: Color(0xFF16A34A),
     detailedSlopes: [
-      DetailedSlope(name: '1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '950m', note: '메인 베이스 연결 와이드 슬로프'),
-      DetailedSlope(name: '1-1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '300m', note: '초심자 전용 입문 강습장'),
-      DetailedSlope(name: '2번 슬로프 (오렌지)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '700m', note: '중벌 고속 리프트 연결 코스'),
-      DetailedSlope(name: '3번 슬로프 (뉴오렌지)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '중급 카빙 & 다이나믹 웨이브'),
-      DetailedSlope(name: '5번 슬로프 (구 블루/실버)', section: '상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m', note: '지산 최고의 고속 카빙 메인 슬로프'),
-      DetailedSlope(name: '6번 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '800m', note: '연결 및 안전 전용로'),
-      DetailedSlope(name: '7번 슬로프 (구 블랙)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '950m', note: '지산 최고 경사도 절벽 & 모굴 코스'),
-      DetailedSlope(name: '지산 익스트림 파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '500m', note: '수도권 최강 3단 키커 및 레일/박스 지빙'),
+      DetailedSlope(name: '1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '950m'),
+      DetailedSlope(name: '1-1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '300m'),
+      DetailedSlope(name: '2번 슬로프 (오렌지)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '700m'),
+      DetailedSlope(name: '3번 슬로프 (뉴오렌지)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m'),
+      DetailedSlope(name: '5번 슬로프 (구 블루/실버)', section: '상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m'),
+      DetailedSlope(name: '6번 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '800m'),
+      DetailedSlope(name: '7번 슬로프 (구 블랙)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '950m'),
+      DetailedSlope(name: '지산 익스트림 파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '500m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~23:00)', '심야 (23:00~02:00)'],
     webcams: [
@@ -1393,11 +1387,11 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.cloud_rounded,
     themeColor: Color(0xFF0284C7),
     detailedSlopes: [
-      DetailedSlope(name: '드림 1, 2 (Dream)', section: '드림 구역', difficulty: SlopeDifficulty.beginner, length: '1,100m', note: '완만하고 아늑한 숲속 힐링 코스'),
-      DetailedSlope(name: '해피 (Happy)', section: '해피 구역', difficulty: SlopeDifficulty.novice, length: '2,150m', note: '함백산 능선 2.1km 롱코스'),
-      DetailedSlope(name: '글로리 1, 2 (Glory)', section: '글로리 구역', difficulty: SlopeDifficulty.intermediate, length: '1,400m', note: '천연 파우더 설질 중급 카빙'),
-      DetailedSlope(name: '챌린지 (Challenge)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '900m', note: '오투 타워 정상 급경사 다운힐'),
-      DetailedSlope(name: '패션 (Passion)', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '750m', note: '고난이도 테크니컬 코스'),
+      DetailedSlope(name: '드림 1, 2 (Dream)', section: '드림 구역', difficulty: SlopeDifficulty.beginner, length: '1,100m'),
+      DetailedSlope(name: '해피 (Happy)', section: '해피 구역', difficulty: SlopeDifficulty.novice, length: '2,150m'),
+      DetailedSlope(name: '글로리 1, 2 (Glory)', section: '글로리 구역', difficulty: SlopeDifficulty.intermediate, length: '1,400m'),
+      DetailedSlope(name: '챌린지 (Challenge)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '900m'),
+      DetailedSlope(name: '패션 (Passion)', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '750m'),
     ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~21:30)'],
     webcams: [
@@ -1415,13 +1409,13 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.park_rounded,
     themeColor: Color(0xFF4B5563),
     detailedSlopes: [
-      DetailedSlope(name: '팬더 (Panda)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '500m', note: '메인 스키하우스 앞 광폭 슬로프'),
-      DetailedSlope(name: '래빗 (Rabbit)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m', note: '초심자 전용 강습장'),
-      DetailedSlope(name: '드래곤 (Dragon)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,050m', note: '백양리 전철역 뷰 롱 크루징'),
-      DetailedSlope(name: '디어 (Deer)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', note: '엘리시안 대표 중급 카빙'),
-      DetailedSlope(name: '퓨마 (Puma)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '알프스 하우스 방면 급경사'),
-      DetailedSlope(name: '페가수스 (Pegasus)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '850m', note: '엘리시안 최고 난이도 테크니컬 코스'),
-      DetailedSlope(name: '강촌 익스트림 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m', note: '박스, 레일, 미니 키커'),
+      DetailedSlope(name: '팬더 (Panda)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '500m'),
+      DetailedSlope(name: '래빗 (Rabbit)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m'),
+      DetailedSlope(name: '드래곤 (Dragon)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,050m'),
+      DetailedSlope(name: '디어 (Deer)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m'),
+      DetailedSlope(name: '퓨마 (Puma)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m'),
+      DetailedSlope(name: '페가수스 (Pegasus)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '850m'),
+      DetailedSlope(name: '강촌 익스트림 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~22:30)', '심야 (22:30~03:00)'],
     webcams: [
@@ -1439,15 +1433,15 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.filter_hdr_rounded,
     themeColor: Color(0xFF0284C7),
     detailedSlopes: [
-      DetailedSlope(name: '실크로드 상단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,100m', note: '구름 위를 달리는 환상의 롱코스'),
-      DetailedSlope(name: '실크로드 하단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,000m', note: '국내 단일 최장 슬로프 (총 6.1km)'),
-      DetailedSlope(name: '루키힐', section: '만선베이스', difficulty: SlopeDifficulty.intermediate, length: '1,200m', note: '만선 최고의 인기 중급 카빙 코스'),
-      DetailedSlope(name: '커넥션', section: '만선베이스', difficulty: SlopeDifficulty.beginner, length: '800m', note: '만선과 설천을 잇는 광폭 초급로'),
-      DetailedSlope(name: '레이더스 상단', section: '만선봉 정상', difficulty: SlopeDifficulty.extreme, length: '950m', note: '국내 최고 경사도 38도 직벽 절벽 사면'),
-      DetailedSlope(name: '레이더스 하단', section: '만선봉 정상', difficulty: SlopeDifficulty.expert, length: '800m', note: '레이더스 연결 고속 다운힐'),
-      DetailedSlope(name: '프리폴', section: '설천 구역', difficulty: SlopeDifficulty.expert, length: '750m', note: '설천봉 급사면 상급 코스'),
-      DetailedSlope(name: '야마가', section: '만선 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m', note: '전통의 모굴 테크니컬 코스'),
-      DetailedSlope(name: '미뉴에트 / 모차르트', section: '설천봉 능선', difficulty: SlopeDifficulty.expert, length: '1,000m', note: '설천봉 능선 고난이도 코스'),
+      DetailedSlope(name: '실크로드 상단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,100m'),
+      DetailedSlope(name: '실크로드 하단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,000m'),
+      DetailedSlope(name: '루키힐', section: '만선베이스', difficulty: SlopeDifficulty.intermediate, length: '1,200m'),
+      DetailedSlope(name: '커넥션', section: '만선베이스', difficulty: SlopeDifficulty.beginner, length: '800m'),
+      DetailedSlope(name: '레이더스 상단', section: '만선봉 정상', difficulty: SlopeDifficulty.extreme, length: '950m'),
+      DetailedSlope(name: '레이더스 하단', section: '만선봉 정상', difficulty: SlopeDifficulty.expert, length: '800m'),
+      DetailedSlope(name: '프리폴', section: '설천 구역', difficulty: SlopeDifficulty.expert, length: '750m'),
+      DetailedSlope(name: '야마가', section: '만선 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m'),
+      DetailedSlope(name: '미뉴에트 / 모차르트', section: '설천봉 능선', difficulty: SlopeDifficulty.expert, length: '1,000m'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
     webcams: [
@@ -1533,18 +1527,11 @@ class WeatherService {
         return weather;
       }
     } catch (_) {
-      // 네트워크 오프라인 시 기본 더미 날씨 반환
+      // 네트워크 오프라인 또는 오류 시
+      return null;
     }
 
-    return ResortWeather(
-      temp: -3.2,
-      apparentTemp: -6.5,
-      windSpeed: 2.4,
-      humidity: 55,
-      weatherDesc: '맑음',
-      iconEmoji: '☀️',
-      dailyForecasts: ResortWeather._createDefault5DayForecasts(-3.2),
-    );
+    return null;
   }
 }
 
@@ -2026,7 +2013,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    '${_selectedSnowResort.name} (${_selectedSnowResort.region}) ${weather != null ? '${weather.iconEmoji} ${weather.temp > 0 ? '+' : ''}${weather.temp.toStringAsFixed(1)}°C (${weather.weatherDesc})' : '❄️'}',
+                    '${_selectedSnowResort.name} (${_selectedSnowResort.region}) ${weather != null ? '${weather.iconEmoji} ${weather.temp > 0 ? '+' : ''}${weather.temp.toStringAsFixed(1)}°C (${weather.weatherDesc})' : '❄️ 날씨 정보를 불러올 수 없습니다'}',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2713,13 +2700,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          weather != null ? '${weather.iconEmoji} ${weather.temp > 0 ? '+' : ''}${weather.temp.toStringAsFixed(1)}°' : '❄️ -2.5°',
+                          weather != null ? '${weather.iconEmoji} ${weather.temp > 0 ? '+' : ''}${weather.temp.toStringAsFixed(1)}°' : '❄️ --.-°',
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
                         ),
                       ],
                     ),
                     Text(
-                      weather != null ? '체감 ${weather.apparentTemp.toStringAsFixed(1)}° • ${weather.weatherDesc}' : '체감 -5.0° • 맑음',
+                      weather != null ? '체감 ${weather.apparentTemp.toStringAsFixed(1)}° • ${weather.weatherDesc}' : '날씨 정보를 불러올 수 없습니다',
                       style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -6153,7 +6140,15 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                         ),
                         const SizedBox(height: 12),
                         if (weather == null)
-                          const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator()))
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Text(
+                                '날씨 정보를 불러올 수 없습니다',
+                                style: TextStyle(fontSize: 12.5, color: Colors.grey, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          )
                         else
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -6260,6 +6255,16 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                                   ),
                                 );
                               }).toList(),
+                            ),
+                          )
+                        else
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                              child: Text(
+                                '주간 예보 정보를 불러올 수 없습니다',
+                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
                             ),
                           ),
                       ],
@@ -6408,7 +6413,7 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 4. 실시간 슬로프 운용 현황판 & 구역별 세부 슬로프
+                  // 4. 슬로프 코스 제원 & 난이도 안내
                   DetailedSlopeStatusWidget(resort: resort),
                   const SizedBox(height: 24),
                 ],
@@ -7166,7 +7171,7 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
           children: [
             Row(
               children: [
-                const Text('⛷️ 슬로프 코스 & 제원 정보', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
+                const Text('⛷️ 슬로프 코스 제원 & 난이도 안내', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 6),
                 Text('총 ${slopes.length}개', style: TextStyle(fontSize: 13, color: widget.resort.themeColor, fontWeight: FontWeight.bold)),
               ],
@@ -7178,7 +7183,7 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.2)),
               ),
-              child: const Text('26/27 시즌 코스', style: TextStyle(fontSize: 10.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+              child: const Text('코스 제원 가이드', style: TextStyle(fontSize: 10.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -7306,8 +7311,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _matchNotification = true;
   bool _chatNotification = true;
   bool _eventNotification = true;
-  int _versionTapCount = 0;
-  bool _showDevMenu = false;
 
   @override
   void initState() {
@@ -7982,45 +7985,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       const SizedBox(height: 24),
 
-                      // 6. 🛠️ QA & 자체 테스트 도구 (Sandbox) - 릴리즈 모드 및 앱스토어 심사 시 자동 숨김
-                      if (kDebugMode || _showDevMenu) ...[
-                        _buildSectionTitle('🛠️ 개발자 & 자체 테스트 도구 (Sandbox)'),
-                        const SizedBox(height: 8),
-                        _buildQASandboxCard(),
-                        const SizedBox(height: 24),
-                      ],
-
-                      // 7. 계정 관리
+                      // 6. 계정 관리
                       _buildSectionTitle('계정 관리'),
                       const SizedBox(height: 8),
                       _buildAccountCard(user),
 
                       const SizedBox(height: 30),
                       Center(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _versionTapCount++;
-                              if (_versionTapCount >= 5) {
-                                _showDevMenu = !_showDevMenu;
-                                _versionTapCount = 0;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(_showDevMenu
-                                        ? '🛠️ 개발자 샌드박스 도구가 활성화되었습니다.'
-                                        : '🔒 개발자 샌드박스 도구가 숨겨졌습니다.'),
-                                    duration: const Duration(seconds: 2),
-                                    backgroundColor: const Color(0xFF1E293B),
-                                  ),
-                                );
-                              }
-                            });
-                          },
-                          child: Text(
-                            '같이타요 v1.0.0 • 26/27 시즌\n카카오 • 네이버 • Apple 공식 OAuth 연동',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
-                          ),
+                        child: Text(
+                          '같이타요 v1.0.0 • 26/27 시즌\n카카오 • Apple 공식 OAuth 연동',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -8071,7 +8046,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.military_tech_rounded,
                   iconColor: Colors.amber.shade700,
                   label: '라이더 칭호',
-                  value: user.riderTitle,
+                  value: user.effectiveRiderTitle,
                   subText: '상위 15% 라이더',
                 ),
               ),
@@ -8753,384 +8728,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  // -------------------------------------------------------------
-  // 🛠️ QA / 자체 테스트 샌드박스 도구 위젯
-  // -------------------------------------------------------------
-  Widget _buildQASandboxCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF38BDF8), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.handyman_rounded, color: Color(0xFF38BDF8), size: 20),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  '🛠️ QA & 자체 테스트 도구 (Sandbox)',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: Colors.greenAccent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text('DEBUG', style: TextStyle(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            '목데이터를 비워 백지 상태에서 글을 써보거나, 여러 계정을 넘나들며 혼자서도 2인 이상의 실시간 동행/참가/채팅 시뮬레이션을 완벽하게 테스트할 수 있습니다.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.4),
-          ),
-          const SizedBox(height: 14),
-
-          // 도구 1: 목데이터 비우기 (클린 백지 모드) & 복원
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFF87171),
-                    side: const BorderSide(color: Color(0xFFF87171)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      gRidePosts.clear();
-                      gRideReviews.clear();
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF991B1B),
-                        content: Text('🧹 모든 샘플 글/후기를 비웠습니다. (백지 클린 모드) 직접 첫 글을 작성해보세요!'),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.delete_sweep_rounded, size: 16),
-                  label: const Text('목데이터 비우기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E293B),
-                    foregroundColor: const Color(0xFF38BDF8),
-                    side: const BorderSide(color: Color(0xFF38BDF8)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () async {
-                    final posts = await AppFirebaseService.instance.getRidePostsOnce();
-                    final reviews = await AppFirebaseService.instance.getReviewsOnce();
-                    if (mounted) {
-                      setState(() {
-                        gRidePosts = posts;
-                        gRideReviews = reviews;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          backgroundColor: Color(0xFF065F46),
-                          content: Text('🔄 Firestore 서버 데이터와 새로 동기화되었습니다.'),
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.cloud_sync_rounded, size: 16),
-                  label: const Text('서버 데이터 동기화', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // 도구 2: 계정 즉시 전환 (방장 ↔ 참가자 1인 멀티플레이어 시뮬레이션)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: _showSwitchAccountDialog,
-              icon: const Icon(Icons.switch_account_rounded, size: 18),
-              label: Text(
-                '🎭 계정 즉시 전환 (현재: ${gCurrentUser?.nickname ?? "로그아웃"})',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // 도구 3: 탈주 페널티 해제 및 1일 1회 매칭 티켓 충전
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF38BDF8),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-              onPressed: () {
-                setState(() {
-                  gPostBanUntil = null;
-                  gDailyRandomMatchRemaining = 1;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    backgroundColor: Color(0xFF0284C7),
-                    content: Text('⚡ [테스트] 2시간 탈주 페널티 해제 & 랜덤 매칭 기회가 1회 충전되었습니다.'),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.bolt_rounded, size: 16),
-              label: const Text('⚡ 페널티 해제 & 오늘 매칭 기회 1회 충전', style: TextStyle(fontSize: 11.5)),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // 도구 3-2: 이벤트 푸시 수신 시뮬레이션 (크리스마스 시즌 예시)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF881337),
-                foregroundColor: const Color(0xFFFDA4AF),
-                side: const BorderSide(color: Color(0xFFF43F5E)),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () {
-                NotificationService.instance.showLocalNotification(
-                  title: '🎄 [시즌 이벤트] 크리스마스 슬로프 매칭 페스티벌!',
-                  body: '크리스마스 이브/당일 한정! 성별 선택 & 1:1 슬로프 메이트 매칭 이벤트가 시작됩니다 ⛷️🏂',
-                  payload: 'event_christmas',
-                );
-
-                showDialog(
-                  context: context,
-                  builder: (dialogCtx) => AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    title: const Row(
-                      children: [
-                        Text('🎄', style: TextStyle(fontSize: 22)),
-                        SizedBox(width: 8),
-                        Text('시즌 이벤트 푸시 알림', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                      ],
-                    ),
-                    content: const Text(
-                      '【크리스마스 슬로프 매칭 페스티벌】\n\n'
-                      '❄️ 크리스마스 이브 & 당일 한정 특별 이벤트!\n'
-                      '• 선택적 본인 성별 설정 & 같이타요 뱃지 노출\n'
-                      '• 남녀 1:1 슬로프 메이트 신규 랜덤 매칭 오픈\n\n'
-                      '※ 전체 사용자 대상 FCM 이벤트 토픽(\'events\')으로 발송된 실시간 푸시 예시입니다.',
-                      style: TextStyle(fontSize: 13.5, height: 1.5),
-                    ),
-                    actions: [
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(dialogCtx),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE11D48),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        child: const Text('확인'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              icon: const Icon(Icons.campaign_rounded, size: 16),
-              label: const Text('📢 이벤트 푸시 수신 테스트 (크리스마스 시즌 예시)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-            ),
-          ),
-          const Divider(height: 16, color: Color(0xFF334155)),
-          const SizedBox(height: 4),
-
-          // 도구 4: 새벽 글작성 제한 시간(02~07시) 우회 토글
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.nightlight_round, color: Color(0xFF818CF8), size: 18),
-            title: const Text('새벽 글작성 시간제한 우회 (QA)', style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
-            subtitle: Text(
-              gBypassWritingHoursForQA ? '현재 24시간 언제든 글쓰기 가능' : '새벽 02:00~07:00 작성 제한 정상 작동 중',
-              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5),
-            ),
-            value: gBypassWritingHoursForQA,
-            activeThumbColor: const Color(0xFF38BDF8),
-            onChanged: (val) {
-              setState(() {
-                gBypassWritingHoursForQA = val;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF1E3A8A),
-                  content: Text(val ? '⏰ 새벽 글작성 시간제한이 우회되었습니다.' : '⏰ 새벽 글작성 시간제한이 정상 적용되었습니다.'),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSwitchAccountDialog() {
-    final accounts = [
-      UserProfile(
-        id: 'user_pyeongchang_1',
-        provider: SocialAuthProvider.kakao,
-        email: 'pyeongchang@kakao.com',
-        nickname: '평창눈사람',
-        preferredDiscipline: '스키',
-        homeResort: '모나용평',
-        level: '중급',
-        joinedAt: DateTime(2026, 1, 1),
-        riderTitle: '골드 라이더 🏂',
-      ),
-      UserProfile(
-        id: 'user_gonjiam_2',
-        provider: SocialAuthProvider.apple,
-        email: 'gonjiam@apple.com',
-        nickname: '곤지암라이더',
-        preferredDiscipline: '스노보드',
-        homeResort: '곤지암리조트',
-        level: '상급',
-        joinedAt: DateTime(2026, 1, 10),
-        riderTitle: '플래티넘 마스터 ⛷️',
-      ),
-      UserProfile(
-        id: 'user_vivaldi_3',
-        provider: SocialAuthProvider.naver,
-        email: 'vivaldi@naver.com',
-        nickname: '비발디보더',
-        preferredDiscipline: '스노보드',
-        homeResort: '비발디파크',
-        level: '초중급',
-        joinedAt: DateTime(2026, 2, 1),
-        riderTitle: '실버 라이더 🏂',
-      ),
-      UserProfile(
-        id: 'user_new_4',
-        provider: SocialAuthProvider.kakao,
-        email: 'newbie@kakao.com',
-        nickname: '익명의새내기#1234',
-        preferredDiscipline: '스노보드',
-        homeResort: '하이원리조트',
-        level: '초급',
-        joinedAt: DateTime.now(),
-        riderTitle: '새싹 라이더 🌱',
-      ),
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.switch_account_rounded, color: Color(0xFF2563EB), size: 22),
-              SizedBox(width: 8),
-              Text('테스트 계정 전환', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '계정을 전환하여 내가 올린 글에 다른 사람인 척 참가 신청하거나 1:1 대화방 채팅을 테스트할 수 있습니다.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.35),
-                ),
-                const SizedBox(height: 12),
-                ...accounts.map((acc) {
-                  final isCurrent = gCurrentUser?.nickname == acc.nickname;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    decoration: BoxDecoration(
-                      color: isCurrent ? const Color(0xFFEFF6FF) : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isCurrent ? const Color(0xFF2563EB) : Colors.grey.shade200,
-                        width: isCurrent ? 1.5 : 1.0,
-                      ),
-                    ),
-                    child: ListTile(
-                      dense: true,
-                      leading: CircleAvatar(
-                        backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                        radius: 16,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2.0),
-                          child: Image.asset(
-                            acc.disciplineAvatarAsset,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                      title: Text(acc.nickname, style: TextStyle(fontWeight: FontWeight.bold, color: isCurrent ? const Color(0xFF2563EB) : Colors.black87)),
-                      subtitle: Text('${acc.homeResort} • ${acc.preferredDiscipline} • ${acc.level}', style: const TextStyle(fontSize: 11)),
-                      trailing: isCurrent ? const Icon(Icons.check_circle, color: Color(0xFF2563EB), size: 18) : null,
-                      onTap: () {
-                        setState(() {
-                          gCurrentUser = acc;
-                        });
-                        NotificationService.instance.startRealtimeNotificationListener(
-                          currentNickname: acc.nickname,
-                          currentUid: acc.id,
-                          getJoinedPostIds: () => gRidePosts.where((p) => p.canAccessChat).map((p) => p.id).toList(),
-                          getBadgeCount: () => gRidePosts.where((p) => p.canAccessChat).fold<int>(0, (acc, p) => acc + p.unreadCount),
-                        );
-                        NotificationService.instance.syncTokenForUser(acc.id);
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: const Color(0xFF1E3A8A),
-                            content: Text('\'${acc.nickname}\' 계정으로 즉시 전환되었습니다.'),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
