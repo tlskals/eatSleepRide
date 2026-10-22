@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart';
 import 'services/firebase_service.dart';
 import 'services/notification_service.dart';
@@ -259,7 +260,7 @@ class SkiResort {
   final double lng;
   final List<DetailedSlope> detailedSlopes;
   final List<String> availableTimeSlots;
-  final List<SkiWebcam> webcams;
+  final String officialWebcamUrl;
   final IconData icon;
   final Color themeColor;
 
@@ -272,11 +273,12 @@ class SkiResort {
     required this.lng,
     required this.detailedSlopes,
     this.availableTimeSlots = const ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)'],
-    required this.webcams,
+    required this.officialWebcamUrl,
     this.icon = Icons.snowboarding_rounded,
     this.themeColor = const Color(0xFF2563EB),
   });
 
+  List<SkiWebcam> get webcams => const [];
   List<String> get slopes => detailedSlopes.map((s) => s.displayName).toList();
   String get logoAsset => 'assets/logos/$id.png';
   String get trailMapAsset => 'assets/trailmaps/$id.png';
@@ -1188,11 +1190,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '곤지암 펀파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~02)'],
-    webcams: [
-      SkiWebcam(name: '윈디/제타 상급 정상', location: '해발 500m 정상 쉼터', streamUrl: 'https://www.konjiamresort.co.kr'),
-      SkiWebcam(name: '휘슬/하늬 초중급', location: '슬로프 중앙 합류점', streamUrl: 'https://www.konjiamresort.co.kr'),
-      SkiWebcam(name: '시계탑 메인 베이스', location: '리프트 탑승장 광장', streamUrl: 'https://www.konjiamresort.co.kr'),
-    ],
+    officialWebcamUrl: 'https://www.konjiamresort.co.kr/ski/liveCam.dev',
   ),
   SkiResort(
     id: 'vivaldi',
@@ -1217,11 +1215,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: 'BMW 레이싱 코스', section: '레이싱 구역', difficulty: SlopeDifficulty.expert, length: '500m', mapX: 0.88, mapY: 0.49),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (23:00~03:00)'],
-    webcams: [
-      SkiWebcam(name: '재즈(Jazz) 중급 슬로프', location: '재즈 리프트 상단', streamUrl: 'https://www.sonohotelsresorts.com'),
-      SkiWebcam(name: '발라드(Ballad) 초급 슬로프', location: '발라드 탑승장 앞', streamUrl: 'https://www.sonohotelsresorts.com'),
-      SkiWebcam(name: '테크노/락 상급 정상', location: '매봉산 정상 휴게소', streamUrl: 'https://www.sonohotelsresorts.com'),
-    ],
+    officialWebcamUrl: 'https://www.sonohotelsresorts.com/skiboard/status',
   ),
   SkiResort(
     id: 'yongpyong',
@@ -1250,11 +1244,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '드래곤 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (19:00~22:00)'],
-    webcams: [
-      SkiWebcam(name: '발왕산 드래곤피크 (1,458m)', location: '레인보우 최정상', streamUrl: 'https://www.yongpyong.co.kr'),
-      SkiWebcam(name: '골드/레드 중상급 슬로프', location: '골드 스낵 앞', streamUrl: 'https://www.yongpyong.co.kr'),
-      SkiWebcam(name: '메가그린 대형 슬로프', location: '메가그린 리프트', streamUrl: 'https://www.yongpyong.co.kr'),
-    ],
+    officialWebcamUrl: 'https://www.yongpyong.co.kr/kor/guide/realTimeNews/ypResortWebcam.do',
   ),
   SkiResort(
     id: 'phoenix',
@@ -1283,11 +1273,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '펀파크 & 웨이브존', section: '익스트림 파크', difficulty: SlopeDifficulty.novice, status: SlopeStatus.park, length: '450m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~24)'],
-    webcams: [
-      SkiWebcam(name: '몽블랑 정상 (해발 1,050m)', location: '곤돌라 정상 정류장', streamUrl: 'https://phoenixhnr.co.kr'),
-      SkiWebcam(name: '호크 / 익스트림 파크', location: '파크 키커/지빙 구역', streamUrl: 'https://phoenixhnr.co.kr'),
-      SkiWebcam(name: '펭귄 초급 베이스', location: '스키하우스 정면 광장', streamUrl: 'https://phoenixhnr.co.kr'),
-    ],
+    officialWebcamUrl: 'https://phoenixhnr.co.kr/m/page/pyeongchang/guide/operation/sketchMovie',
   ),
   SkiResort(
     id: 'high1',
@@ -1318,11 +1304,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '제우스 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,020m'),
     ],
     availableTimeSlots: ['주간 (09~16)', '오후 (12~16)', '야간 (18~22)'],
-    webcams: [
-      SkiWebcam(name: '마운틴 탑 (해발 1,340m)', location: '회전전망대 정상', streamUrl: 'https://www.high1.com'),
-      SkiWebcam(name: '헤라/아폴로 중상급', location: '마운틴 허브 환승장', streamUrl: 'https://www.high1.com'),
-      SkiWebcam(name: '밸리 베이스 광장', location: '밸리 콘도 스키하우스', streamUrl: 'https://www.high1.com'),
-    ],
+    officialWebcamUrl: 'https://www.high1.com/ski/slopeView.do?key=748&mode=p',
   ),
   SkiResort(
     id: 'wellihilli',
@@ -1345,11 +1327,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '웰리 펀파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '650m'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (22:30~24:00)'],
-    webcams: [
-      SkiWebcam(name: '술이봉 정상 (해발 890m)', location: '곤돌라 정상 하차장', streamUrl: 'https://www.wellihillipark.com'),
-      SkiWebcam(name: '브라보 / 챌린지 슬로프', location: 'D 리프트 상단', streamUrl: 'https://www.wellihillipark.com'),
-      SkiWebcam(name: '메인 베이스 광장', location: '본관 스키하우스 앞', streamUrl: 'https://www.wellihillipark.com'),
-    ],
+    officialWebcamUrl: 'https://m.wellihillipark.com/customer/webcam',
   ),
   SkiResort(
     id: 'jisan',
@@ -1371,11 +1349,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '지산 익스트림 파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '500m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~23:00)', '심야 (23:00~02:00)'],
-    webcams: [
-      SkiWebcam(name: '5번 / 7번 상급 슬로프', location: '고속 리프트 상단', streamUrl: 'https://www.jisanresort.co.kr'),
-      SkiWebcam(name: '3번 중급 슬로프', location: '중앙 쉼터 앞', streamUrl: 'https://www.jisanresort.co.kr'),
-      SkiWebcam(name: '1번 초급 및 메인 광장', location: '만남의 광장 시계탑', streamUrl: 'https://www.jisanresort.co.kr'),
-    ],
+    officialWebcamUrl: 'https://www.jisanresort.co.kr/m/ski/slopes/webcam.asp',
   ),
   SkiResort(
     id: 'o2',
@@ -1394,10 +1368,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '패션 (Passion)', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '750m'),
     ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~21:30)'],
-    webcams: [
-      SkiWebcam(name: '함백산 정상 뷰 (1,420m)', location: '오투 타워 정상', streamUrl: 'https://www.o2resort.com'),
-      SkiWebcam(name: '글로리/해피 슬로프', location: '슬로프 분기점', streamUrl: 'https://www.o2resort.com'),
-    ],
+    officialWebcamUrl: 'https://www.o2resort.com/GDE/webcam.jsp',
   ),
   SkiResort(
     id: 'elysian',
@@ -1418,10 +1389,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '강촌 익스트림 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~22:30)', '심야 (22:30~03:00)'],
-    webcams: [
-      SkiWebcam(name: '드래곤/디어 슬로프', location: '알프스 하우스 앞', streamUrl: 'https://www.elysian.co.kr'),
-      SkiWebcam(name: '스키하우스 메인 광장', location: '전철역 연결 통로 앞', streamUrl: 'https://www.elysian.co.kr'),
-    ],
+    officialWebcamUrl: 'https://www.elysian.co.kr/about-gangchon/ski#guide-to-using-slopes',
   ),
   SkiResort(
     id: 'muju',
@@ -1444,11 +1412,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '미뉴에트 / 모차르트', section: '설천봉 능선', difficulty: SlopeDifficulty.expert, length: '1,000m'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
-    webcams: [
-      SkiWebcam(name: '설천봉 정상 (해발 1,520m)', location: '향적봉 케이블카 상단', streamUrl: 'https://www.mdysresort.com'),
-      SkiWebcam(name: '만선봉 정상 / 루키힐', location: '만선베이스 상단', streamUrl: 'https://www.mdysresort.com'),
-      SkiWebcam(name: '설천하우스 광장', location: '실크로드 하단부', streamUrl: 'https://www.mdysresort.com'),
-    ],
+    officialWebcamUrl: 'https://www.mdysresort.com/guide/webcam.asp',
   ),
   SkiResort(
     id: 'alpensia',
@@ -1468,10 +1432,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: '폭스트롯 (Foxtrot)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '600m', mapX: 0.08, mapY: 0.44),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
-    webcams: [
-      SkiWebcam(name: '알펜시아 메인 슬로프', location: '스키하우스 2층 전망대', streamUrl: 'https://www.alpensia.com'),
-      SkiWebcam(name: '에코/델타 상급 정상', location: '리프트 최상단', streamUrl: 'https://www.alpensia.com'),
-    ],
+    officialWebcamUrl: 'https://www.alpensia.com/guide/web-cam.do',
   ),
   SkiResort(
     id: 'oakvalley',
@@ -1495,10 +1456,7 @@ const List<SkiResort> kSkiResorts = [
       DetailedSlope(name: 'G 슬로프', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '950m'),
     ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~22:30)'],
-    webcams: [
-      SkiWebcam(name: 'A / G 상급 슬로프', location: '마운틴 정상', streamUrl: 'https://www.oakvalley.co.kr'),
-      SkiWebcam(name: '골프빌리지 베이스', location: '스키빌리지 중앙 광장', streamUrl: 'https://www.oakvalley.co.kr'),
-    ],
+    officialWebcamUrl: 'https://oakvalley.co.kr/ski/introduction/realtime',
   ),
 ];
 
@@ -5832,129 +5790,22 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
     }
   }
 
-  void _showWebcamPlayer(BuildContext context, SkiResort resort, SkiWebcam webcam) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(18.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.fiber_manual_record, color: Colors.white, size: 10),
-                          SizedBox(width: 4),
-                          Text('LIVE CCTV', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        webcam.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // 실시간 웹캠 시뮬레이션 뷰어
-                Container(
-                  width: double.infinity,
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(14),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [const Color(0xFF0F172A), resort.themeColor.withValues(alpha: 0.35)],
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.videocam_rounded, size: 48, color: Colors.white.withValues(alpha: 0.8)),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${resort.shortName} ${webcam.name}',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              webcam.location,
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}:${DateTime.now().second.toString().padLeft(2, '0')} HD',
-                            style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontFamily: 'monospace'),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '💡 해당 슬로프의 실시간 인원 밀집도 및 설질 상태를 확인할 수 있습니다.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: resort.themeColor,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${resort.name} 공식 고화질 스트림에 연결되었습니다.')),
-                      );
-                    },
-                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                    label: const Text('리조트 공식 고화질 영상 보기', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Future<void> _launchOfficialWebcamUrl(BuildContext context, SkiResort resort) async {
+    final uri = Uri.parse(resort.officialWebcamUrl);
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${resort.name} 웹캠 페이지를 열 수 없습니다.')),
         );
-      },
-    );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('웹캠 연결 실패: $e')),
+        );
+      }
+    }
   }
 
   void _showFullScreenTrailMapImage(BuildContext context, SkiResort resort) {
@@ -6355,45 +6206,98 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 3. 실시간 슬로프 웹캠 (CCTV)
+                  // 3. 실시간 슬로프 웹캠 (리조트 공식 라이브캠)
                   Row(
                     children: [
-                      const Text('📹 실시간 슬로프 웹캠 (CCTV)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      const Text('📹 실시간 슬로프 웹캠 (공식 라이브캠)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                       const Spacer(),
-                      Text('${resort.webcams.length}개 채널', style: TextStyle(fontSize: 12, color: resort.themeColor, fontWeight: FontWeight.bold)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.fiber_manual_record, color: Colors.red, size: 8),
+                            SizedBox(width: 4),
+                            Text('OFFICIAL LIVE', style: TextStyle(color: Colors.red, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  ...resort.webcams.map((cam) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.videocam_rounded, color: Colors.red, size: 20),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                        title: Text(cam.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold)),
-                        subtitle: Text(cam.location, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600)),
-                        trailing: FilledButton.tonal(
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                          ),
-                          onPressed: () => _showWebcamPlayer(context, resort, cam),
-                          child: const Text('실시간 보기', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(9),
+                              decoration: BoxDecoration(
+                                color: resort.themeColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.videocam_rounded, color: resort.themeColor, size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${resort.shortName} 공식 실시간 웹캠',
+                                    style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '리조트 공식 실시간 슬로프 현장 영상을 확인합니다.',
+                                    style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    );
-                  }),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: resort.themeColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () => _launchOfficialWebcamUrl(context, resort),
+                            icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                            label: Text(
+                              '${resort.shortName} 공식 웹캠 바로가기',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 18),
 
                   // 3. 26/27 시즌 운영 시간대

@@ -46,6 +46,7 @@ dependencies:
   kakao_flutter_sdk_user: ^1.9.5
   google_sign_in: ^6.2.2
   shared_preferences: ^2.3.2
+  url_launcher: ^6.3.2
 
 
 dev_dependencies:
