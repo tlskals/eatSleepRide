@@ -7690,6 +7690,367 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showInquiryModal() {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    final emailController = TextEditingController(text: gCurrentUser?.email ?? '');
+    String selectedCategory = '일반 문의';
+    bool isSubmitting = false;
+
+    final categories = ['일반 문의', '버그 제보', '기능 제안', '불량 유저 신고'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.only(
+                top: 16,
+                left: 20,
+                right: 20,
+                bottom: bottomInset + 20,
+              ),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.support_agent_rounded, color: Color(0xFF2563EB), size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '고객지원 및 문의 / 제보',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                '개발자 메일(ridetogetherrr@gmail.com)로 즉시 전송',
+                                style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.grey),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF86EFAC)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.flash_on_rounded, size: 18, color: Color(0xFF16A34A)),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '작성 후 전송하시면 개발자에게 즉시 메일이 발송되며, 24시간 이내 검토 및 조치됩니다.',
+                              style: TextStyle(fontSize: 11.5, color: Color(0xFF166534), height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '문의 유형',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: categories.map((cat) {
+                        final isSelected = selectedCategory == cat;
+                        return ChoiceChip(
+                          label: Text(
+                            cat,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: const Color(0xFF2563EB),
+                          backgroundColor: Colors.grey.shade100,
+                          showCheckmark: false,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade300,
+                            ),
+                          ),
+                          onSelected: (val) {
+                            if (val) {
+                              setModalState(() => selectedCategory = cat);
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '제목',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: titleController,
+                      maxLength: 50,
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '문의 또는 제보 제목',
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      '상세 내용',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: contentController,
+                      maxLines: 4,
+                      maxLength: 1000,
+                      decoration: InputDecoration(
+                        hintText: '문의 사항이나 불량 이용자 닉네임, 상황을 자세히 적어주세요.',
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      '답변받을 이메일 (선택)',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        hintText: '답변을 원하시면 이메일을 남겨주세요',
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                        prefixIcon: const Icon(Icons.email_outlined, size: 20, color: Colors.grey),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                final title = titleController.text.trim();
+                                final content = contentController.text.trim();
+                                if (title.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('문의 제목을 입력해 주세요.')),
+                                  );
+                                  return;
+                                }
+                                if (content.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('문의 내용을 입력해 주세요.')),
+                                  );
+                                  return;
+                                }
+
+                                setModalState(() => isSubmitting = true);
+                                final messenger = ScaffoldMessenger.of(context);
+
+                                try {
+                                  final success = await AppFirebaseService.instance.submitInquiry(
+                                    category: selectedCategory,
+                                    title: title,
+                                    content: content,
+                                    replyEmail: emailController.text.trim(),
+                                  );
+
+                                  if (ctx.mounted) {
+                                    Navigator.pop(ctx);
+                                  }
+                                  if (mounted) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        backgroundColor: success ? const Color(0xFF1E3A8A) : Colors.red.shade700,
+                                        content: Text(
+                                          success
+                                              ? '📨 문의가 개발자에게 전달되었습니다. 신속히 확인하겠습니다!'
+                                              : '⚠️ 전송에 실패했습니다. 다시 시도해 주세요.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (ctx.mounted) {
+                                    setModalState(() => isSubmitting = false);
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(content: Text('전송 중 오류 발생: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                        child: isSubmitting
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.send_rounded, size: 18),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    '문의 / 제보 전송하기',
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey.shade700,
+                        ),
+                        onPressed: () async {
+                          final title = titleController.text.trim();
+                          final content = contentController.text.trim();
+                          final subject = Uri.encodeComponent('[같이타요 $selectedCategory] ${title.isEmpty ? "문의사항" : title}');
+                          final body = Uri.encodeComponent(
+                            '문의 내용:\n${content.isEmpty ? "(내용을 입력하세요)" : content}\n\n'
+                            '---\n'
+                            '발신자: ${gCurrentUser?.nickname ?? "익명"} (${gCurrentUser?.id ?? "anonymous"})\n'
+                            '회신 이메일: ${emailController.text.trim()}',
+                          );
+                          final uri = Uri.parse('mailto:ridetogetherrr@gmail.com?subject=$subject&body=$body');
+                          try {
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri);
+                            } else {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          } catch (e) {
+                            debugPrint('mailto launch error: $e');
+                          }
+                        },
+                        icon: const Icon(Icons.mail_rounded, size: 16),
+                        label: const Text(
+                          '직접 기본 메일 앱으로 작성하기',
+                          style: TextStyle(fontSize: 12, decoration: TextDecoration.underline),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _logout() {
     showDialog(
       context: context,
@@ -8685,44 +9046,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.support_agent_rounded, color: Color(0xFF0284C7)),
             title: const Text('고객지원 및 불량 유저 제보', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-            subtitle: const Text('ridetogetherrr@gmail.com (24시간 이내 조치)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+            subtitle: const Text('제목·내용 작성 후 즉시 개발자 메일 전송 (24시간 조치)', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
             trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  title: const Row(
-                    children: [
-                      Icon(Icons.support_agent_rounded, color: Color(0xFF2563EB)),
-                      SizedBox(width: 8),
-                      Text('고객지원 및 신고 안내', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  content: const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '부적절한 게시글이나 불량 이용자를 발견하셨을 경우, 게시글 내 [신고] 버튼을 이용하시거나 아래 이메일로 제보해 주시기 바랍니다.',
-                        style: TextStyle(fontSize: 13, height: 1.45),
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        '📧 고객지원/신고 이메일: ridetogetherrr@gmail.com\n⏰ 처리 방침: 접수 후 24시간 이내 콘텐츠 삭제 및 계정 제재',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF1E3A8A)),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('확인', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              );
-            },
+            onTap: _showInquiryModal,
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(

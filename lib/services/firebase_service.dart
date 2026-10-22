@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
+import 'package:http/http.dart' as http;
 import 'notification_service.dart';
 import '../main.dart';
 
@@ -1278,6 +1279,70 @@ class AppFirebaseService {
 
   Future<void> seedInitialDataIfEmpty(dynamic posts, dynamic reviews) async {
     // No-op or seed if needed
+  }
+
+  // -------------------------------------------------------------
+  // 📨 1:1 고객지원 및 불량 유저 제보 (Firestore 저장 + 메일 발송)
+  // -------------------------------------------------------------
+  Future<bool> submitInquiry({
+    required String category,
+    required String title,
+    required String content,
+    String? replyEmail,
+  }) async {
+    bool firestoreOk = false;
+    try {
+      await _firestore.collection('inquiries').add({
+        'category': category,
+        'title': title,
+        'content': content,
+        'replyEmail': replyEmail ?? '',
+        'senderUid': currentUid,
+        'senderNickname': gCurrentUser?.nickname ?? '익명',
+        'createdAt': FieldValue.serverTimestamp(),
+        'appVersion': '1.0.0',
+        'status': 'pending',
+      });
+      firestoreOk = true;
+      debugPrint('📨 [Inquiry] Firestore inquiries 컬렉션 저장 성공');
+    } catch (e) {
+      debugPrint('📨 [Inquiry] Firestore 저장 실패: $e');
+    }
+
+    bool emailOk = false;
+    try {
+      final response = await http.post(
+        Uri.parse('https://formsubmit.co/ajax/ridetogetherrr@gmail.com'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Origin': 'https://formsubmit.co',
+          'Referer': 'https://formsubmit.co/',
+        },
+        body: jsonEncode({
+          '_subject': '[같이타요 문의] [$category] $title',
+          '카테고리': category,
+          '제목': title,
+          '내용': content,
+          '회신받을이메일': (replyEmail != null && replyEmail.isNotEmpty) ? replyEmail : '미기재',
+          '보낸유저': gCurrentUser?.nickname ?? '익명',
+          '보낸유저ID': currentUid,
+          '_captcha': 'false',
+          '_template': 'table',
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        emailOk = true;
+        debugPrint('📨 [Inquiry] FormSubmit 메일 발송 성공: ${response.body}');
+      } else {
+        debugPrint('📨 [Inquiry] FormSubmit 응답 코드: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('📨 [Inquiry] FormSubmit 발송 예외: $e');
+    }
+
+    return firestoreOk || emailOk;
   }
 }
 
