@@ -5793,17 +5793,26 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
   Future<void> _launchOfficialWebcamUrl(BuildContext context, SkiResort resort) async {
     final uri = Uri.parse(resort.officialWebcamUrl);
     try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // 1순위: 앱 내 사파리 뷰어(SFSafariViewController)로 앱 이탈 없이 쾌적하게 띄움 (시뮬레이터 & 실기기 완벽 지원)
+      bool launched = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (!launched) {
+        // 2순위 fallback: 외부 사파리 브라우저 앱으로 열기
+        launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
       if (!launched && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${resort.name} 웹캠 페이지를 열 수 없습니다.')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('웹캠 연결 실패: $e')),
-        );
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e2) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('웹캠 연결 실패: $e2')),
+          );
+        }
       }
     }
   }
