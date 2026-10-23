@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'notification_service.dart';
 import '../main.dart';
@@ -69,12 +70,16 @@ class AppFirebaseService {
 
       final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user;
-      final uniqueId = user?.uid ?? 'apple_${DateTime.now().millisecondsSinceEpoch % 10000}';
+      final uniqueId = user?.uid ?? appleCredential.userIdentifier ?? currentUid;
+      final givenName = appleCredential.givenName;
+
       final profile = UserProfile(
         id: uniqueId,
         provider: SocialAuthProvider.apple,
-        email: appleCredential.email ?? user?.email ?? 'apple_rider@eatsleepride.app',
-        nickname: '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "appl"}',
+        email: appleCredential.email ?? user?.email ?? 'apple_user@icloud.com',
+        nickname: (givenName != null && givenName.isNotEmpty)
+            ? '$givenName 라이더'
+            : '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "appl"}',
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
@@ -90,25 +95,7 @@ class AppFirebaseService {
       return profile;
     } catch (e) {
       debugPrint('Apple Sign In error (or cancelled): $e');
-      final uniqueId = 'apple_${DateTime.now().millisecondsSinceEpoch % 10000}';
-      final profile = UserProfile(
-        id: uniqueId,
-        provider: SocialAuthProvider.apple,
-        email: 'rider_apple@icloud.com',
-        nickname: '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "999"}',
-        preferredDiscipline: '스노보드',
-        homeResort: '비발디파크',
-        level: '초중급',
-        joinedAt: DateTime.now(),
-        completedRidesCount: 0,
-        taggedReviewsCount: 0,
-        snowPoints: 0,
-        riderTitle: '비기너 라이더 🏂',
-      );
-      gCurrentUser = profile;
-      await saveUserProfile(profile);
-      unawaited(NotificationService.instance.syncTokenForUser(profile.id));
-      return profile;
+      return null;
     }
   }
 
@@ -130,12 +117,15 @@ class AppFirebaseService {
       kakao.User kakaoUser = await kakao.UserApi.instance.me();
       final kakaoId = kakaoUser.id.toString();
       final email = kakaoUser.kakaoAccount?.email ?? 'kakao_$kakaoId@kakao.com';
+      final kakaoNick = kakaoUser.kakaoAccount?.profile?.nickname;
 
       final profile = UserProfile(
         id: 'kakao_$kakaoId',
         provider: SocialAuthProvider.kakao,
         email: email,
-        nickname: '익명의라이더#${kakaoId.length >= 4 ? kakaoId.substring(kakaoId.length - 4) : kakaoId}',
+        nickname: (kakaoNick != null && kakaoNick.isNotEmpty)
+            ? kakaoNick
+            : '익명의라이더#${kakaoId.length >= 4 ? kakaoId.substring(kakaoId.length - 4) : kakaoId}',
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
@@ -150,59 +140,45 @@ class AppFirebaseService {
       unawaited(NotificationService.instance.syncTokenForUser(profile.id));
       return profile;
     } catch (e) {
-      debugPrint('Kakao Sign In (fallback): $e');
-      final uniqueId = 'kakao_${DateTime.now().millisecondsSinceEpoch % 10000}';
-      final profile = UserProfile(
-        id: uniqueId,
-        provider: SocialAuthProvider.kakao,
-        email: 'rider_kakao@kakao.com',
-        nickname: '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "777"}',
-        preferredDiscipline: '스노보드',
-        homeResort: '비발디파크',
-        level: '초중급',
-        joinedAt: DateTime.now(),
-        completedRidesCount: 0,
-        taggedReviewsCount: 0,
-        snowPoints: 0,
-        riderTitle: '비기너 라이더 🏂',
-      );
-      gCurrentUser = profile;
-      await saveUserProfile(profile);
-      unawaited(NotificationService.instance.syncTokenForUser(profile.id));
-      return profile;
+      debugPrint('Kakao Sign In error (or cancelled): $e');
+      return null;
     }
   }
 
   Future<UserProfile?> signInWithNaver() async {
-    final uniqueId = 'naver_${DateTime.now().millisecondsSinceEpoch % 10000}';
-    final profile = UserProfile(
-      id: uniqueId,
-      provider: SocialAuthProvider.naver,
-      email: 'rider_naver@naver.com',
-      nickname: '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "888"}',
-      preferredDiscipline: '스키',
-      homeResort: '모나용평',
-      level: '중급',
-      joinedAt: DateTime.now(),
-      completedRidesCount: 0,
-      taggedReviewsCount: 0,
-      snowPoints: 0,
-      riderTitle: '비기너 라이더 🏂',
-    );
-    gCurrentUser = profile;
-    await saveUserProfile(profile);
-    unawaited(NotificationService.instance.syncTokenForUser(profile.id));
-    return profile;
+    // 네이버는 네이버 개발자 센터 Client ID 및 URL Scheme 연동 후 활성화됩니다.
+    debugPrint('Naver Sign In: pending developer center credentials setup');
+    return null;
   }
 
   Future<UserProfile?> signInWithGoogle() async {
     try {
-      final uniqueId = 'google_${DateTime.now().millisecondsSinceEpoch % 10000}';
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        debugPrint('Google Sign In cancelled by user');
+        return null;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+      final uid = user?.uid ?? 'google_${googleUser.id}';
+      final email = googleUser.email;
+      final name = googleUser.displayName;
+
       final profile = UserProfile(
-        id: uniqueId,
+        id: uid,
         provider: SocialAuthProvider.google,
-        email: 'rider_google@gmail.com',
-        nickname: '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "666"}',
+        email: email,
+        nickname: (name != null && name.isNotEmpty)
+            ? name
+            : '익명의라이더#${uid.length >= 4 ? uid.substring(uid.length - 4) : "goog"}',
         preferredDiscipline: '스노보드',
         homeResort: '휘닉스파크',
         level: '중급',

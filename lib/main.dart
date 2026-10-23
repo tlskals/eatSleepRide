@@ -9728,20 +9728,33 @@ class _LoginScreenState extends State<LoginScreen> {
       profile = await AppFirebaseService.instance.signInWithNaver();
     }
 
-    if (context.mounted && profile != null) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF1E3A8A),
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text('${profile.providerDisplayName} 로그인 완료! 환영합니다 🎿'),
-            ],
+    if (context.mounted) {
+      if (profile != null) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF1E3A8A),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('${profile.providerDisplayName} 로그인 완료! 환영합니다 🎿'),
+              ],
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF334155),
+            content: Text(
+              provider == SocialAuthProvider.naver
+                  ? '네이버 로그인은 현재 개발자 센터 연동 준비 중입니다. 카카오, Apple 또는 Google 로그인을 이용해주세요.'
+                  : '로그인이 취소되었거나 인증에 실패했습니다.',
+            ),
+          ),
+        );
+      }
     }
   }
 
