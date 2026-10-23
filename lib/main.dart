@@ -158,10 +158,6 @@ class ResortWeather {
       }
     }
 
-    if (forecasts.isEmpty) {
-      forecasts = _createDefault5DayForecasts(temp);
-    }
-
     return ResortWeather(
       temp: temp,
       apparentTemp: apparentTemp,
@@ -191,16 +187,6 @@ class ResortWeather {
     if (code >= 51 && code <= 67 || code >= 80 && code <= 82) return '🌧️';
     if (code >= 95) return '⚡';
     return '☀️';
-  }
-
-  static List<DailyWeatherForecast> _createDefault5DayForecasts(double baseTemp) {
-    return [
-      DailyWeatherForecast(date: '오늘', dayName: '오늘 (수)', maxTemp: baseTemp + 2.0, minTemp: baseTemp - 3.5, snowfall: 0.0, weatherDesc: '맑음', iconEmoji: '☀️'),
-      DailyWeatherForecast(date: '내일', dayName: '내일 (목)', maxTemp: baseTemp + 0.5, minTemp: baseTemp - 5.0, snowfall: 3.5, weatherDesc: '눈 ❄️', iconEmoji: '❄️'),
-      DailyWeatherForecast(date: 'D+2', dayName: '금요일', maxTemp: baseTemp - 1.0, minTemp: baseTemp - 7.2, snowfall: 5.0, weatherDesc: '파우더 강설 ❄️', iconEmoji: '❄️'),
-      DailyWeatherForecast(date: 'D+3', dayName: '토요일', maxTemp: baseTemp + 1.2, minTemp: baseTemp - 4.0, snowfall: 0.0, weatherDesc: '구름조금', iconEmoji: '⛅'),
-      DailyWeatherForecast(date: 'D+4', dayName: '일요일', maxTemp: baseTemp + 3.0, minTemp: baseTemp - 2.5, snowfall: 0.0, weatherDesc: '맑음', iconEmoji: '☀️'),
-    ];
   }
 }
 
@@ -4501,39 +4487,15 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
 
-        // 모집글 목록에서 찾거나 없으면 임시 방 생성 후 입장
-        final post = gRidePosts.firstWhere(
-          (p) => p.id == matchedPostId,
-          orElse: () => RidePost(
-            id: matchedPostId,
-            title: '[⚡️ 4인 매칭] ${_selectedResort.shortName} 실시간 번개',
-            content: '${_selectedResort.name} 4인 슬로프 메이트 대화방',
-            resortName: _selectedResort.name,
-            slopes: ['전체 슬로프 (자유)'],
-            discipline: '혼합',
-            style: '자유 라이딩',
-            skillLevel: '무관',
-            purpose: '랜덤 매칭',
-            dateText: '오늘 실시간',
-            timeSlot: '실시간 즉시',
-            maxMembers: 3,
-            currentMembers: 4,
-            authorName: '시스템',
-            isJoined: true,
-            chatMessages: [
-              ChatMessage(
-                sender: '시스템',
-                text: '🎉 [${_selectedResort.shortName}] 4인 실시간 매칭이 성사되었습니다!\n함께할 메이트들과 반갑게 인사하고 슬로프 약속을 정해보세요 ⛷️🏂',
-                time: DateTime.now(),
-                isSystem: true,
-              ),
-            ],
-          ),
-        );
+        // Firestore 실제 매칭 글 조회 (로컬에 없으면 서버에서 직접 조회)
+        RidePost? post = gRidePosts.where((p) => p.id == matchedPostId).firstOrNull;
+        post ??= await AppFirebaseService.instance.getRidePostById(matchedPostId);
+        if (!mounted || post == null) return;
+        final validPost = post;
 
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => ChatRoomScreen(post: post),
+            builder: (_) => ChatRoomScreen(post: validPost),
           ),
         );
       }
@@ -5657,13 +5619,6 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
 
-  final List<String> _samplePhotoPresets = [
-    '정상 슬로프 파우더 뷰 ❄️',
-    '메이트들과 단체 인생샷 🏂',
-    '야간 슬로프 조명 전경 🌙',
-    '베이스 스키하우스 쉼터 ☕️',
-    '슬로프 턴 엣지 자국 🎿',
-  ];
 
   final List<String> _presetTags = [
     '#4인랜덤매칭후기',
@@ -5761,29 +5716,6 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
                   Navigator.pop(context);
                   _pickFromCamera();
                 },
-              ),
-
-              const Divider(height: 20),
-              const Text('또는 추천 프리셋 선택', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _samplePhotoPresets.map((photo) {
-                  final isAdded = _attachedPhotos.contains(photo);
-                  return ActionChip(
-                    avatar: Icon(Icons.add, size: 14, color: isAdded ? Colors.green : const Color(0xFF2563EB)),
-                    label: Text(photo, style: const TextStyle(fontSize: 12)),
-                    onPressed: () {
-                      if (!isAdded) {
-                        setState(() {
-                          _attachedPhotos.add(photo);
-                        });
-                      }
-                      Navigator.pop(context);
-                    },
-                  );
-                }).toList(),
               ),
             ],
           ),
@@ -11272,32 +11204,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  void _requestOneMoreMember() {
-    setState(() {
-      widget.post.currentMembers = 4;
-      const newMemberName = '익명의 라이더 D';
-      if (!widget.post.participantNames.contains(newMemberName)) {
-        widget.post.participantNames.add(newMemberName);
-      }
-      final refillMsg = ChatMessage(
-        sender: '시스템',
-        text: '🎉 [충원 완료] 새로운 슬로프 메이트($newMemberName)님이 합류하셨습니다!\n다시 4인 번개가 완성되었습니다 ⛷️🏂',
-        time: DateTime.now(),
-        isSystem: true,
-      );
-      widget.post.chatMessages.add(refillMsg);
-      if (widget.post.id.isNotEmpty) {
-        AppFirebaseService.instance.sendChatMessage(widget.post.id, refillMsg);
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Color(0xFF16A34A),
-        content: Text('⚡ 새로운 메이트가 즉시 충원되어 4인이 완성되었습니다!'),
-      ),
-    );
-  }
 
   void _confirmDeletePostAndCloseRoom() {
     showDialog(
@@ -11345,8 +11251,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isRandomMatch = widget.post.purpose.contains('랜덤');
-    final bool needsRefill = isRandomMatch && widget.post.currentMembers < 4;
 
     return Scaffold(
       appBar: AppBar(
@@ -11463,49 +11367,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         child: Text(
                           '🌙 모집 일정이 만료(익일 02:00)되어 대화방이 자동 종료되었습니다.',
                           style: TextStyle(fontSize: 11.5, color: Colors.black87, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (needsRefill)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFBEB),
-                    border: Border(bottom: BorderSide(color: Colors.amber.shade200)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.group_outlined, size: 18, color: Color(0xFFD97706)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '참여자 1명이 퇴장했습니다 (현재 ${widget.post.currentMembers}명)',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-                            ),
-                            const Text(
-                              '3명이서 타거나, 1명을 즉시 충원할 수 있습니다.',
-                              style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: _requestOneMoreMember,
-                        icon: const Icon(Icons.bolt_rounded, size: 14),
-                        label: const Text('1명 즉시 충원', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD97706),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          elevation: 0,
                         ),
                       ),
                     ],
