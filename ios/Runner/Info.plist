@@ -64,6 +64,14 @@
 				<string>kakaoc6a747117409de895acefc4b77fa969c</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.239117471945-jje5beul3afc1p3m2afusbpfhp0t8f99</string>
+			</array>
+		</dict>
 	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
