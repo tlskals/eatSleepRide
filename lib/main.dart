@@ -399,8 +399,18 @@ class RidePost {
       (isAuthor || isJoined || (gCurrentUser?.nickname != null && participantNames.contains(gCurrentUser!.nickname))) &&
       !isExpired &&
       !isBlinded;
-  bool get shouldHide => isBlinded || reportCount >= 3 || isExpired;
+
+  // 🛡️ Apple Guideline 1.2: 로컬 피드 즉시 숨김(Immediate Removal) 및 신고 즉시 숨김
+  bool get shouldHide =>
+      isBlinded ||
+      reportCount >= 3 ||
+      isExpired ||
+      (gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
+      gHiddenContentIds.contains(id);
 }
+
+// 🛡️ Apple Guideline 1.2: 피드에서 즉시 숨김(Immediate Removal) 처리된 항목 ID 세트
+final Set<String> gHiddenContentIds = <String>{};
 
 
 // -------------------------------------------------------------
@@ -971,7 +981,12 @@ class RideReview {
     List<String>? reportedUserIds,
   }) : reportedUserIds = reportedUserIds ?? [];
 
-  bool get shouldHide => isBlinded || reportCount >= 3;
+  // 🛡️ Apple Guideline 1.2: 로컬 피드 즉시 숨김(Immediate Removal) 및 신고 즉시 숨김
+  bool get shouldHide =>
+      isBlinded ||
+      reportCount >= 3 ||
+      (gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
+      gHiddenContentIds.contains(id);
 }
 
 // -------------------------------------------------------------
@@ -990,6 +1005,9 @@ class LiveSnowComment {
   final DateTime createdAt;
   int likes;
   List<String> likedUserNames;
+  int reportCount;
+  List<String> reportedUserIds;
+  bool isBlinded;
 
   LiveSnowComment({
     required this.id,
@@ -1003,19 +1021,32 @@ class LiveSnowComment {
     required this.createdAt,
     this.likes = 0,
     List<String>? likedUserNames,
-  }) : likedUserNames = likedUserNames ?? [];
+    this.reportCount = 0,
+    List<String>? reportedUserIds,
+    this.isBlinded = false,
+  })  : likedUserNames = likedUserNames ?? [],
+        reportedUserIds = reportedUserIds ?? [];
+
+  // 🛡️ Apple Guideline 1.2: 로컬 피드 즉시 숨김(Immediate Removal)
+  bool get shouldHide =>
+      isBlinded ||
+      reportCount >= 3 ||
+      (gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
+      gHiddenContentIds.contains(id);
 }
 
 // -------------------------------------------------------------
-// 🛡️ 금칙어 & 외부 링크 실시간 자동 필터링 서비스
+// 🛡️ 금칙어 & 외부 링크 실시간 자동 필터링 서비스 (Apple Guideline 1.2)
 // -------------------------------------------------------------
 
 class ContentFilterService {
-  // 음란/도박/불법 대출 금칙어 목록
+  // 음란/도박/불법 대출/욕설 및 비방 금칙어 목록
   static const List<String> _bannedKeywords = [
     '조건만남', '성인용품', '출장샵', '원나잇', '애인대행', '유흥', '섹스', '야동', '오프녀',
     '바카라', '카지노', '사설토토', '토토사이트', '릴게임', '홀덤펍광고', '불법대출', '코인리딩',
     '고수익알바', '입금요구', '몸캠', '비아그라', '마약', '대마',
+    'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'pussy', 'slut', 'cunt',
+    '씨발', '시발', '병신', '지랄', '개새끼', '존나', '좆', '새끼', '미친년', '미친놈', '등신', '호구',
   ];
 
   // 외부 링크 및 연락처 패턴
@@ -1129,8 +1160,10 @@ void showReportContentDialog({
                         SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            '안전한 슬로프 문화를 위해 서로 다른 라이더 3명의 신고가 누적되면 해당 게시글은 24시간 실시간 무인 자동 블라인드(숨김) 처리됩니다.',
-                            style: TextStyle(fontSize: 11, color: Colors.red, height: 1.35),
+                            '🛡️ 안전 정책 안내 (Apple Guideline 1.2)\n'
+                            '• 신고 접수 즉시 회원님의 피드에서 해당 게시글이 즉시 숨김(삭제) 처리됩니다.\n'
+                            '• 접수된 신고는 24시간 이내에 관리자가 전수 검토하여 부적절한 콘텐츠를 영구 삭제하고, 불량 이용자는 무관용 원칙(Zero-Tolerance)에 따라 영구 퇴출(계정 영구 정지) 조치합니다.',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF7F1D1D), height: 1.4),
                           ),
                         ),
                       ],
@@ -2024,7 +2057,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               }
 
-              final displayed = comments.take(3).toList();
+              final visibleComments = comments.where((c) {
+                if (c.shouldHide) return false;
+                if (gCurrentUser != null && gCurrentUser!.isUserBlocked(c.authorUid ?? c.authorName)) return false;
+                return true;
+              }).toList();
+
+              if (visibleComments.isEmpty) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.ac_unit_rounded, size: 26, color: Colors.blue.shade300),
+                      const SizedBox(height: 6),
+                      Text(
+                        '아직 오늘 등록된 ${_selectedSnowResort.shortName}의 실시간 설질 한줄평이 없습니다.\n첫 한줄평을 남기고 50P를 획득해보세요! ❄️',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.4),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final displayed = visibleComments.take(3).toList();
 
               return Column(
                 children: displayed.map((comment) {
@@ -2071,6 +2133,83 @@ class _HomeScreenState extends State<HomeScreen> {
                             Text(
                               timeAgo,
                               style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                            const SizedBox(width: 4),
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert, size: 16, color: Colors.grey),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'hide',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.visibility_off_outlined, size: 15, color: Colors.black87),
+                                      SizedBox(width: 6),
+                                      Text('이 한줄평 피드에서 즉시 숨기기', style: TextStyle(fontSize: 12.5)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'report',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.flag_outlined, size: 15, color: Colors.orange),
+                                      SizedBox(width: 6),
+                                      Text('한줄평 신고하기 (24h 검토)', style: TextStyle(fontSize: 12.5)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'block',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.block_rounded, size: 15, color: Colors.red),
+                                      SizedBox(width: 6),
+                                      Text('작성자 차단하기', style: TextStyle(fontSize: 12.5, color: Colors.red)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              onSelected: (action) {
+                                if (action == 'hide') {
+                                  setState(() {
+                                    gHiddenContentIds.add(comment.id);
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      backgroundColor: Color(0xFF1E3A8A),
+                                      content: Text('한줄평이 회원님의 피드에서 즉시 숨김(삭제) 처리되었습니다.'),
+                                    ),
+                                  );
+                                } else if (action == 'block') {
+                                  _showBlockUserDialog(comment.authorName, targetUid: comment.authorUid);
+                                } else if (action == 'report') {
+                                  final currentUserId = gCurrentUser?.id ?? 'me';
+                                  showReportContentDialog(
+                                    context: context,
+                                    targetType: '설질 한줄평',
+                                    targetAuthor: comment.authorName,
+                                    currentReportCount: comment.reportCount,
+                                    onReportSuccess: (reason) {
+                                      setState(() {
+                                        gHiddenContentIds.add(comment.id);
+                                        comment.reportedUserIds.add(currentUserId);
+                                        comment.reportCount += 1;
+                                        if (comment.reportCount >= 3) {
+                                          comment.isBlinded = true;
+                                        }
+                                      });
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          backgroundColor: Color(0xFF1E3A8A),
+                                          content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 조치)'),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),
@@ -2164,7 +2303,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
+                  // 🛡️ Apple Guideline 1.2: 무관용 원칙 EULA 고지 배너
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.shield_outlined, size: 14, color: Color(0xFFDC2626)),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '욕설, 비방, 허위 설질 작성 시 무관용 원칙(Zero-Tolerance)에 따라 24시간 이내 즉시 삭제 및 계정 이용 정지 조치됩니다.',
+                            style: TextStyle(fontSize: 10.5, color: Color(0xFF991B1B), height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   const Text('설질 상태 선택', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Wrap(
@@ -2220,6 +2382,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (text.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('한줄평 내용을 입력해주세요.')),
+                    );
+                    return;
+                  }
+
+                  // 🛡️ 실시간 비속어/유해 콘텐츠 자동 필터링 (Apple Guideline 1.2)
+                  final filterError = ContentFilterService.validate(text);
+                  if (filterError != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: Colors.red.shade800,
+                        content: Text('⚠️ $filterError'),
+                      ),
                     );
                     return;
                   }
@@ -2283,6 +2457,47 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showBlockUserDialog(String nickname, {String? targetUid}) {
+    final blockTarget = (targetUid != null && targetUid.isNotEmpty) ? targetUid : nickname;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('사용자 차단', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('\'$nickname\' 님을 차단하시겠습니까?\n\n차단 시 해당 사용자가 작성한 모든 글과 한줄평이 목록에서 즉시 숨김 처리됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                if (gCurrentUser != null) {
+                  gCurrentUser!.blockUser(blockTarget);
+                  AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
+                }
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  content: Text('\'$nickname\' 님을 차단했습니다. 목록에서 즉시 숨김 처리되었습니다.'),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('차단하기'),
+          ),
+        ],
       ),
     );
   }
@@ -3804,6 +4019,26 @@ class _RidePostListViewState extends State<RidePostListView> {
                       constraints: const BoxConstraints(),
                       itemBuilder: (context) => [
                         const PopupMenuItem(
+                          value: 'hide',
+                          child: Row(
+                            children: [
+                              Icon(Icons.visibility_off_outlined, size: 16, color: Colors.black87),
+                              SizedBox(width: 8),
+                              Text('이 글 피드에서 즉시 숨기기', style: TextStyle(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'report',
+                          child: Row(
+                            children: [
+                              Icon(Icons.flag_outlined, size: 16, color: Colors.orange),
+                              SizedBox(width: 8),
+                              Text('모집글 신고하기 (24h 검토)', style: TextStyle(fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
                           value: 'block',
                           child: Row(
                             children: [
@@ -3813,19 +4048,19 @@ class _RidePostListViewState extends State<RidePostListView> {
                             ],
                           ),
                         ),
-                        const PopupMenuItem(
-                          value: 'report',
-                          child: Row(
-                            children: [
-                              Icon(Icons.flag_outlined, size: 16, color: Colors.black87),
-                              SizedBox(width: 8),
-                              Text('모집글 신고하기', style: TextStyle(fontSize: 13)),
-                            ],
-                          ),
-                        ),
                       ],
                       onSelected: (val) {
-                        if (val == 'block') {
+                        if (val == 'hide') {
+                          setState(() {
+                            gHiddenContentIds.add(post.id);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Color(0xFF1E3A8A),
+                              content: Text('게시글이 회원님의 피드에서 즉시 숨김(삭제) 처리되었습니다.'),
+                            ),
+                          );
+                        } else if (val == 'block') {
                           _showBlockUserDialog(post.authorName, targetUid: post.authorUid);
                         } else if (val == 'report') {
                           final currentUserId = gCurrentUser?.id ?? 'me';
@@ -3842,6 +4077,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                             currentReportCount: post.reportCount,
                             onReportSuccess: (reason) {
                               setState(() {
+                                gHiddenContentIds.add(post.id);
                                 post.reportCount += 1;
                                 post.reportedUserIds.add(currentUserId);
                                 if (post.reportCount >= 3) {
@@ -3851,21 +4087,12 @@ class _RidePostListViewState extends State<RidePostListView> {
                               if (post.id.isNotEmpty) {
                                 AppFirebaseService.instance.reportRidePost(post.id, currentUserId);
                               }
-                              if (post.isBlinded) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    backgroundColor: Color(0xFFDC2626),
-                                    content: Text('🚨 누적 신고 3회로 해당 모집글이 실시간 자동 블라인드(숨김) 처리되었습니다.'),
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    backgroundColor: const Color(0xFF1E3A8A),
-                                    content: Text('🚨 신고가 접수되었습니다. (누적: ${post.reportCount}/3회)'),
-                                  ),
-                                );
-                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: Color(0xFF1E3A8A),
+                                  content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 영구 조치)'),
+                                ),
+                              );
                             },
                           );
                         }
@@ -4961,6 +5188,26 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                   constraints: const BoxConstraints(),
                   itemBuilder: (context) => [
                     const PopupMenuItem(
+                      value: 'hide',
+                      child: Row(
+                        children: [
+                          Icon(Icons.visibility_off_outlined, size: 16, color: Colors.black87),
+                          SizedBox(width: 8),
+                          Text('이 후기 피드에서 즉시 숨기기', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'report',
+                      child: Row(
+                        children: [
+                          Icon(Icons.flag_outlined, size: 16, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Text('후기 신고하기 (24h 검토)', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
                       value: 'block',
                       child: Row(
                         children: [
@@ -4970,19 +5217,19 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
-                      value: 'report',
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag_outlined, size: 16, color: Colors.black87),
-                          SizedBox(width: 8),
-                          Text('후기 신고하기', style: TextStyle(fontSize: 13)),
-                        ],
-                      ),
-                    ),
                   ],
                   onSelected: (val) {
-                    if (val == 'block') {
+                    if (val == 'hide') {
+                      setState(() {
+                        gHiddenContentIds.add(review.id);
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF1E3A8A),
+                          content: Text('후기가 회원님의 피드에서 즉시 숨김(삭제) 처리되었습니다.'),
+                        ),
+                      );
+                    } else if (val == 'block') {
                       _showBlockUserDialog(review.authorName, targetUid: review.authorUid);
                     } else if (val == 'report') {
                       final currentUserId = gCurrentUser?.id ?? 'me';
@@ -5000,6 +5247,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                         currentReportCount: review.reportCount,
                         onReportSuccess: (reason) {
                           setState(() {
+                            gHiddenContentIds.add(review.id);
                             review.reportCount += 1;
                             review.reportedUserIds.add(currentUserId);
                             if (review.reportCount >= 3) {
@@ -5012,21 +5260,12 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                             AppFirebaseService.instance.reportReview(review.id, currentUserId);
                           }
 
-                          if (review.shouldHide) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                backgroundColor: Colors.red,
-                                content: Text('🚨 누적 신고 3회로 해당 후기가 실시간 자동 블라인드(숨김) 처리되었습니다.'),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: const Color(0xFF1E3A8A),
-                                content: Text('🚨 신고가 접수되었습니다. (누적: ${review.reportCount}/3회)'),
-                              ),
-                            );
-                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Color(0xFF1E3A8A),
+                              content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 영구 조치)'),
+                            ),
+                          );
                         },
                       );
                     }
@@ -5536,6 +5775,47 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 🛡️ Apple Guideline 1.2: 안전 수칙 및 무관용(Zero-Tolerance) 원칙 고지 카드
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.shield_rounded, color: Color(0xFFDC2626), size: 18),
+                      SizedBox(width: 6),
+                      Text(
+                        '커뮤니티 안전 정책 및 무관용(Zero-Tolerance) 원칙',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '• 본 서비스는 만 19세(18+) 이상 성인 라이더 전용 커뮤니티입니다.\n'
+                    '• 부적절한 후기 및 음란/선정적 사진 등록 시 사전 경고 없이 즉각 삭제 처리됩니다.\n'
+                    '• 악성 이용자는 무관용 원칙에 따라 24시간 이내 영구 퇴출(계정 이용 정지) 조치됩니다.\n'
+                    '• 후기 등록 시 서비스 이용약관(EULA)에 동의한 것으로 간주됩니다.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF7F1D1D), height: 1.4),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => showAppTermsDialog(context),
+                    child: const Text(
+                      '📜 서비스 이용약관(EULA) 전문 확인하기 >',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB), decoration: TextDecoration.underline),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             // 1. 스키장 선택
             const Text('다녀온 스키장', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
@@ -6591,6 +6871,15 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
       return;
     }
 
+    // 🛡️ 실시간 비속어/유해 콘텐츠 자동 필터링 (Apple Guideline 1.2)
+    final filterError = ContentFilterService.validate(text);
+    if (filterError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red.shade800, content: Text('⚠️ $filterError')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
       final newComment = LiveSnowComment(
@@ -6654,12 +6943,58 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
     }
   }
 
+  void _showBlockUserDialog(String nickname, {String? targetUid}) {
+    final blockTarget = (targetUid != null && targetUid.isNotEmpty) ? targetUid : nickname;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('사용자 차단', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('\'$nickname\' 님을 차단하시겠습니까?\n\n차단 시 해당 사용자가 작성한 모든 글과 후기가 목록에서 즉시 숨김 처리됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                if (gCurrentUser != null) {
+                  gCurrentUser!.blockUser(blockTarget);
+                  AppFirebaseService.instance.saveUserProfile(gCurrentUser!);
+                }
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  content: Text('\'$nickname\' 님을 차단했습니다. 목록에서 즉시 숨김 처리되었습니다.'),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('차단하기'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<LiveSnowComment>>(
       stream: AppFirebaseService.instance.streamLiveSnowComments(resortId: widget.resort.id),
       builder: (context, snapshot) {
-        final comments = snapshot.data ?? [];
+        final rawComments = snapshot.data ?? [];
+        final comments = rawComments.where((c) {
+          if (c.shouldHide) return false;
+          if (gCurrentUser != null && gCurrentUser!.isUserBlocked(c.authorUid ?? c.authorName)) return false;
+          return true;
+        }).toList();
 
         return Container(
           width: double.infinity,
@@ -6854,6 +7189,30 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                     ),
                     const SizedBox(height: 10),
 
+                    // 🛡️ Apple Guideline 1.2: 무관용 원칙 EULA 고지 배너
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.shield_outlined, size: 14, color: Color(0xFFDC2626)),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '욕설, 비방, 허위 설질 작성 시 무관용 원칙(Zero-Tolerance)에 따라 24시간 이내 즉시 삭제 및 계정 이용 정지 조치됩니다.',
+                              style: TextStyle(fontSize: 10.5, color: Color(0xFF991B1B), height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
                     // 한줄평 입력 필드 + 등록 버튼
                     Row(
                       children: [
@@ -6992,6 +7351,83 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                                   fontSize: 11,
                                   color: Colors.grey.shade500,
                                 ),
+                              ),
+                              const SizedBox(width: 4),
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, size: 16, color: Colors.grey),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(
+                                    value: 'hide',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.visibility_off_outlined, size: 15, color: Colors.black87),
+                                        SizedBox(width: 6),
+                                        Text('이 한줄평 피드에서 즉시 숨기기', style: TextStyle(fontSize: 12.5)),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'report',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.flag_outlined, size: 15, color: Colors.orange),
+                                        SizedBox(width: 6),
+                                        Text('한줄평 신고하기 (24h 검토)', style: TextStyle(fontSize: 12.5)),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'block',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.block_rounded, size: 15, color: Colors.red),
+                                        SizedBox(width: 6),
+                                        Text('작성자 차단하기', style: TextStyle(fontSize: 12.5, color: Colors.red)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                onSelected: (action) {
+                                  if (action == 'hide') {
+                                    setState(() {
+                                      gHiddenContentIds.add(c.id);
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        backgroundColor: Color(0xFF1E3A8A),
+                                        content: Text('한줄평이 회원님의 피드에서 즉시 숨김(삭제) 처리되었습니다.'),
+                                      ),
+                                    );
+                                  } else if (action == 'block') {
+                                    _showBlockUserDialog(c.authorName, targetUid: c.authorUid);
+                                  } else if (action == 'report') {
+                                    final currentUserId = gCurrentUser?.id ?? 'me';
+                                    showReportContentDialog(
+                                      context: context,
+                                      targetType: '설질 한줄평',
+                                      targetAuthor: c.authorName,
+                                      currentReportCount: c.reportCount,
+                                      onReportSuccess: (reason) {
+                                        setState(() {
+                                          gHiddenContentIds.add(c.id);
+                                          c.reportedUserIds.add(currentUserId);
+                                          c.reportCount += 1;
+                                          if (c.reportCount >= 3) {
+                                            c.isBlinded = true;
+                                          }
+                                        });
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            backgroundColor: Color(0xFF1E3A8A),
+                                            content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 조치)'),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  }
+                                },
                               ),
                             ],
                           ),
@@ -9853,7 +10289,18 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.black87),
               onSelected: (val) {
-                if (val == 'block') {
+                if (val == 'hide') {
+                  setState(() {
+                    gHiddenContentIds.add(post.id);
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      backgroundColor: Color(0xFF1E3A8A),
+                      content: Text('게시글이 회원님의 피드에서 즉시 숨김(삭제) 처리되었습니다.'),
+                    ),
+                  );
+                } else if (val == 'block') {
                   _showBlockAuthorDialog();
                 } else if (val == 'report') {
                   final currentUserId = gCurrentUser?.id ?? 'me';
@@ -9871,6 +10318,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                     currentReportCount: post.reportCount,
                     onReportSuccess: (reason) {
                       setState(() {
+                        gHiddenContentIds.add(post.id);
                         post.reportCount += 1;
                         post.reportedUserIds.add(currentUserId);
                         if (post.reportCount >= 3) {
@@ -9883,34 +10331,25 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                         AppFirebaseService.instance.reportRidePost(post.id, currentUserId);
                       }
 
-                      if (post.shouldHide) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: Colors.red,
-                            content: Text('🚨 누적 신고 3회로 해당 모집글이 실시간 자동 블라인드(숨김) 처리되었습니다.'),
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: const Color(0xFF1E3A8A),
-                            content: Text('🚨 모집글 신고가 접수되었습니다. (누적: ${post.reportCount}/3회)'),
-                          ),
-                        );
-                      }
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF1E3A8A),
+                          content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 영구 조치)'),
+                        ),
+                      );
                     },
                   );
                 }
               },
               itemBuilder: (context) => [
                 const PopupMenuItem(
-                  value: 'block',
+                  value: 'hide',
                   child: Row(
                     children: [
-                      Icon(Icons.block_rounded, size: 16, color: Colors.red),
+                      Icon(Icons.visibility_off_outlined, size: 16, color: Colors.black87),
                       SizedBox(width: 8),
-                      Text('작성자 차단하기', style: TextStyle(fontSize: 13, color: Colors.red)),
+                      Text('이 글 피드에서 즉시 숨기기', style: TextStyle(fontSize: 13)),
                     ],
                   ),
                 ),
@@ -9918,9 +10357,19 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                   value: 'report',
                   child: Row(
                     children: [
-                      Icon(Icons.flag_outlined, size: 16, color: Colors.black87),
+                      Icon(Icons.flag_outlined, size: 16, color: Colors.orange),
                       SizedBox(width: 8),
-                      Text('게시글 신고하기', style: TextStyle(fontSize: 13)),
+                      Text('게시글 신고하기 (24h 검토)', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'block',
+                  child: Row(
+                    children: [
+                      Icon(Icons.block_rounded, size: 16, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('작성자 차단하기', style: TextStyle(fontSize: 13, color: Colors.red)),
                     ],
                   ),
                 ),
@@ -11315,6 +11764,47 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 🛡️ Apple Guideline 1.2: 안전 수칙 및 무관용(Zero-Tolerance) 원칙 고지 카드
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFCA5A5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.shield_rounded, color: Color(0xFFDC2626), size: 18),
+                      SizedBox(width: 6),
+                      Text(
+                        '커뮤니티 안전 정책 및 무관용(Zero-Tolerance) 원칙',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '• 본 서비스는 만 19세(18+) 이상 성인 라이더 전용 커뮤니티입니다.\n'
+                    '• 부적절한 콘텐츠(욕설, 비방, 음란물, 불법 정보) 게시 시 사전 경고 없이 즉각 삭제 처리됩니다.\n'
+                    '• 악성 이용자는 무관용 원칙에 따라 24시간 이내 영구 퇴출(계정 이용 정지) 조치됩니다.\n'
+                    '• 게시글 등록 시 서비스 이용약관(EULA)에 동의한 것으로 간주됩니다.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFF7F1D1D), height: 1.4),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => showAppTermsDialog(context),
+                    child: const Text(
+                      '📜 서비스 이용약관(EULA) 전문 확인하기 >',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB), decoration: TextDecoration.underline),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const Text('1. 스키장 선택', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Container(
@@ -11700,6 +12190,11 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '* 익명 모드로 등록하더라도 고유 식별자(UID)를 통해 신고/차단 및 24시간 이내 운영자 무관용(Zero-Tolerance) 제재 조치가 엄격히 적용됩니다.',
+              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.3),
             ),
             const SizedBox(height: 32),
 
