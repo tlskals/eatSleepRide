@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart';
@@ -20,6 +21,11 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
+
+  // 🟡 카카오 SDK 초기화
+  KakaoSdk.init(
+    nativeAppKey: '907c46e5306c3e6f119f8f307c00cfc1',
+  );
 
   // 🛡️ Apple Guideline 1.2: 로컬 숨김/차단 캐시 복원
   unawaited(loadHiddenContentIds());
