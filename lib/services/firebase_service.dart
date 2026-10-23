@@ -413,6 +413,14 @@ class AppFirebaseService {
   // -------------------------------------------------------------
   // 2. 같이 타요 모집글 (`gatherings` 컬렉션)
   // -------------------------------------------------------------
+  Stream<Map<String, dynamic>?> streamGatheringDoc(String postId) {
+    return _firestore
+        .collection('gatherings')
+        .doc(postId)
+        .snapshots()
+        .map((doc) => doc.exists ? doc.data() : null);
+  }
+
   Stream<List<RidePost>> streamRidePosts() {
     return _firestore
         .collection('gatherings')
@@ -463,6 +471,7 @@ class AppFirebaseService {
           isAuthor: isAuthor,
           isAnonymous: isAnonymous,
           hasMemberLeft: hasMemberLeft,
+          needsRefill: data['needsRefill'] as bool? ?? false,
           chatMessages: [],
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
@@ -522,6 +531,7 @@ class AppFirebaseService {
           isAuthor: isAuthor,
           isAnonymous: isAnonymous,
           hasMemberLeft: hasMemberLeft,
+          needsRefill: data['needsRefill'] as bool? ?? false,
           chatMessages: [],
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
@@ -584,6 +594,7 @@ class AppFirebaseService {
         isAuthor: isAuthor,
         isAnonymous: isAnonymous,
         hasMemberLeft: hasMemberLeft,
+        needsRefill: data['needsRefill'] as bool? ?? false,
         chatMessages: [],
         reportCount: data['reportCount'] ?? 0,
         isBlinded: data['isBlinded'] ?? false,
@@ -619,6 +630,7 @@ class AppFirebaseService {
         'participantUids': post.participantUids.isNotEmpty ? post.participantUids : [authorUid],
         'isAnonymous': post.isAnonymous,
         'hasMemberLeft': post.hasMemberLeft,
+        'needsRefill': post.needsRefill,
         'reportCount': 0,
         'isBlinded': false,
         'reportedUserIds': [],
@@ -745,6 +757,25 @@ class AppFirebaseService {
         .map((doc) => doc.data());
   }
 
+  Future<void> requestRandomMatchRefill(String postId, bool enabled) async {
+    try {
+      await _firestore.collection('gatherings').doc(postId).update({
+        'needsRefill': enabled,
+      });
+      if (enabled) {
+        await _firestore.collection('gatherings').doc(postId).collection('messages').add({
+          'sender': '시스템',
+          'text': '⚡ [실시간 충원 요청] 빈자리 충원 대기열에 등록되었습니다. 새로운 라이더가 매칭을 시작하면 자동으로 방에 합류합니다.',
+          'time': FieldValue.serverTimestamp(),
+          'isMe': false,
+          'isSystem': true,
+        });
+      }
+    } catch (e) {
+      debugPrint('requestRandomMatchRefill error: $e');
+    }
+  }
+
   Future<void> joinMatchQueue({
     required String resortId,
     required String resortName,
@@ -753,6 +784,62 @@ class AppFirebaseService {
     required String nickname,
   }) async {
     try {
+      // 0. ⚡️ 충원을 기다리는 기존 4인 매칭 방이 있는지 먼저 확인 (빈자리 우선 배정)
+      final refillSnap = await _firestore
+          .collection('gatherings')
+          .where('resortName', isEqualTo: resortName)
+          .where('needsRefill', isEqualTo: true)
+          .where('isBlinded', isEqualTo: false)
+          .limit(1)
+          .get();
+
+      if (refillSnap.docs.isNotEmpty) {
+        final targetDoc = refillSnap.docs.first;
+        final targetData = targetDoc.data();
+        final currentParticipants = List<String>.from(targetData['participantNames'] ?? []);
+        final currentUids = List<String>.from(targetData['participantUids'] ?? []);
+
+        if (!currentUids.contains(uid)) {
+          currentParticipants.add(nickname);
+          currentUids.add(uid);
+          final newCount = currentParticipants.length;
+          final isFullNow = newCount >= 4;
+
+          await targetDoc.reference.update({
+            'participantNames': currentParticipants,
+            'participantUids': currentUids,
+            'currentMembers': newCount,
+            'needsRefill': !isFullNow,
+          });
+
+          await targetDoc.reference.collection('messages').add({
+            'sender': '시스템',
+            'text': '🎉 [실시간 충원 완료] 새로운 슬로프 메이트 [$nickname]님이 합류하셨습니다! 다시 4인이 완성되었습니다 ⛷️🏂',
+            'time': FieldValue.serverTimestamp(),
+            'isMe': false,
+            'isSystem': true,
+          });
+
+          await _firestore.collection('user_match_status').doc(uid).set({
+            'status': 'matched',
+            'matchedPostId': targetDoc.id,
+            'matchedAt': FieldValue.serverTimestamp(),
+          });
+
+          NotificationService.instance.notifyRider(
+            senderNickname: '시스템',
+            targetAuthorName: targetData['authorName'] ?? '익명',
+            targetParticipants: currentParticipants,
+            targetUids: currentUids,
+            title: '⚡️ 슬로프 메이트 충원 완료!',
+            body: '[$shortName] 새로운 메이트가 합류하여 4인이 완성되었습니다!',
+            type: 'random_match_refill',
+            postId: targetDoc.id,
+          );
+          return;
+        }
+      }
+
       // 1. 유저 매칭 상태 초기화
       await _firestore.collection('user_match_status').doc(uid).set({
         'status': 'waiting',

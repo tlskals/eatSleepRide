@@ -315,6 +315,7 @@ class RidePost {
   bool hasMemberLeft;
   bool isJoined;
   bool isAuthor;
+  bool needsRefill;
   final List<ChatMessage> chatMessages;
   int unreadCount; // 💬 읽지 않은 신규 메시지 수
   DateTime createdAt;
@@ -349,6 +350,7 @@ class RidePost {
     this.hasMemberLeft = false,
     this.isJoined = false,
     this.isAuthor = false,
+    this.needsRefill = false,
     required this.chatMessages,
     this.unreadCount = 0,
     DateTime? createdAt,
@@ -10761,6 +10763,7 @@ class ChatRoomScreen extends StatefulWidget {
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription<Map<String, dynamic>?>? _postDocSub;
 
   @override
   void initState() {
@@ -10771,10 +10774,30 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (unreadTotal == 0) {
       NotificationService.instance.clearAllNotificationsAndBadge();
     }
+
+    if (widget.post.id.isNotEmpty) {
+      _postDocSub = AppFirebaseService.instance
+          .streamGatheringDoc(widget.post.id)
+          .listen((data) {
+        if (!mounted || data == null) return;
+        final pNames = List<String>.from(data['participantNames'] ?? []);
+        final pUids = List<String>.from(data['participantUids'] ?? []);
+        final membersCount = (data['currentMembers'] as num?)?.toInt() ?? pNames.length;
+        final refillNeeded = (data['needsRefill'] as bool?) ?? false;
+
+        setState(() {
+          widget.post.participantNames = pNames;
+          widget.post.participantUids = pUids;
+          widget.post.currentMembers = membersCount;
+          widget.post.needsRefill = refillNeeded;
+        });
+      });
+    }
   }
 
   @override
   void dispose() {
+    _postDocSub?.cancel();
     _msgController.dispose();
     _scrollController.dispose();
     widget.post.unreadCount = 0;
@@ -11175,7 +11198,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       final sysMsg = ChatMessage(
         sender: '시스템',
         text: isRandomMatch
-            ? '⚠️ $myNickname 님이 대화방을 퇴장하셨습니다 (현재 ${widget.post.currentMembers}명).\n상단 버튼을 눌러 1명을 즉시 충원하거나 3명이서 라이딩을 진행할 수 있습니다 ⛷️'
+            ? '⚠️ $myNickname 님이 대화방을 퇴장하셨습니다 (현재 ${widget.post.currentMembers}명).\n상단 [1명 실시간 충원] 버튼을 눌러 새 메이트를 충원할 수 있습니다 ⛷️'
             : '⚠️ $myNickname 님이 대화방을 퇴장하셨습니다.',
         time: DateTime.now(),
         isSystem: true,
@@ -11183,6 +11206,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       widget.post.chatMessages.add(sysMsg);
       if (widget.post.id.isNotEmpty) {
         AppFirebaseService.instance.sendChatMessage(widget.post.id, sysMsg);
+        AppFirebaseService.instance.toggleJoinRidePost(widget.post.id, myNickname);
       }
     });
 
@@ -11251,6 +11275,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isRandomMatch = widget.post.purpose.contains('랜덤');
+    final bool needsRefill = isRandomMatch && widget.post.currentMembers < 4;
 
     return Scaffold(
       appBar: AppBar(
@@ -11367,6 +11393,80 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         child: Text(
                           '🌙 모집 일정이 만료(익일 02:00)되어 대화방이 자동 종료되었습니다.',
                           style: TextStyle(fontSize: 11.5, color: Colors.black87, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (needsRefill)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    border: Border(bottom: BorderSide(color: Colors.amber.shade200)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        widget.post.needsRefill ? Icons.sync_rounded : Icons.group_outlined,
+                        size: 18,
+                        color: const Color(0xFFD97706),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.post.needsRefill
+                                  ? '⚡ 실시간 1명 충원 대기 중 (${widget.post.currentMembers}/4명)'
+                                  : '참여자 1명이 퇴장했습니다 (현재 ${widget.post.currentMembers}명)',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                            ),
+                            Text(
+                              widget.post.needsRefill
+                                  ? '다른 라이더가 랜덤 매칭 시작 시 이 방으로 즉시 자동 합류합니다.'
+                                  : '3명이서 타거나, 실시간으로 1명을 충원할 수 있습니다.',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final newStatus = !widget.post.needsRefill;
+                          setState(() {
+                            widget.post.needsRefill = newStatus;
+                          });
+                          if (widget.post.id.isNotEmpty) {
+                            await AppFirebaseService.instance.requestRandomMatchRefill(widget.post.id, newStatus);
+                          }
+                          if (!mounted) return;
+                          messenger.showSnackBar(
+                            SnackBar(
+                              backgroundColor: newStatus ? const Color(0xFFD97706) : Colors.grey.shade700,
+                              content: Text(
+                                newStatus
+                                    ? '⚡ 실시간 충원 대기열에 등록되었습니다! 새 메이트가 입장하면 자동 매칭됩니다.'
+                                    : '충원 요청이 취소되었습니다.',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: Icon(widget.post.needsRefill ? Icons.close_rounded : Icons.bolt_rounded, size: 14),
+                        label: Text(
+                          widget.post.needsRefill ? '충원 취소' : '1명 실시간 충원',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: widget.post.needsRefill ? Colors.grey.shade600 : const Color(0xFFD97706),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
                         ),
                       ),
                     ],
