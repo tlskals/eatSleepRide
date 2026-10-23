@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'firebase_options.dart';
 import 'services/firebase_service.dart';
@@ -19,6 +20,9 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
+
+  // 🛡️ Apple Guideline 1.2: 로컬 숨김/차단 캐시 복원
+  unawaited(loadHiddenContentIds());
 
   // 🚀 앱 UI를 먼저 즉시 띄워 아이폰 실기기 스플래시 화면 멈춤 현상 원천 차단
   runApp(const MyApp());
@@ -409,8 +413,32 @@ class RidePost {
       gHiddenContentIds.contains(id);
 }
 
-// 🛡️ Apple Guideline 1.2: 피드에서 즉시 숨김(Immediate Removal) 처리된 항목 ID 세트
+// 🛡️ Apple Guideline 1.2: 피드에서 즉시 숨김(Immediate Removal) 처리된 항목 ID 세트 및 영구 로컬 캐시
 final Set<String> gHiddenContentIds = <String>{};
+
+Future<void> loadHiddenContentIds() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('hidden_content_ids') ?? [];
+    gHiddenContentIds.addAll(list);
+  } catch (e) {
+    debugPrint('Error loading hidden content ids: $e');
+  }
+}
+
+Future<void> hideContentPermanently(String id) async {
+  gHiddenContentIds.add(id);
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('hidden_content_ids') ?? [];
+    if (!list.contains(id)) {
+      list.add(id);
+      await prefs.setStringList('hidden_content_ids', list);
+    }
+  } catch (e) {
+    debugPrint('Error saving hidden content id: $e');
+  }
+}
 
 
 // -------------------------------------------------------------
@@ -1588,6 +1616,108 @@ class _MainScreenState extends State<MainScreen> {
     // 🔔 기기 간 실시간 푸시 알림 리스너 시작 (상대방 알림만 수신)
     _startOrUpdateNotificationListener();
     gCurrentUserNotifier.addListener(_startOrUpdateNotificationListener);
+
+    // 🛡️ Apple Guideline 1.2: 앱 최초 실행 시 EULA 및 무관용(Zero-Tolerance) 원칙 명시적 동의 모달
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkFirstLaunchEulaConsent();
+    });
+  }
+
+  Future<void> _checkFirstLaunchEulaConsent() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasAgreed = prefs.getBool('has_agreed_to_eula_v1') ?? false;
+      if (!hasAgreed && mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            title: const Row(
+              children: [
+                Icon(Icons.shield_rounded, color: Color(0xFF2563EB), size: 24),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('커뮤니티 안전 정책 & EULA 동의', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              '무관용 원칙 (Zero-Tolerance Policy)',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          '같이타요는 만 19세(18+) 성인 라이더 전용 커뮤니티입니다. 타인에 대한 욕설, 비방, 음란물, 불법 정보 게시 시 사전 경고 없이 즉각 삭제되며 해당 이용자는 영구 이용 정지(계정 차단) 조치됩니다.',
+                          style: TextStyle(fontSize: 11.5, color: Color(0xFF7F1D1D), height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    '1. 1터치 즉시 신고 및 차단 시스템 운영\n'
+                    '2. 실시간 비속어 및 유해 링크 자동 필터링\n'
+                    '3. 접수된 모든 신고는 24시간 이내 관리자 신속 검토 및 조치\n'
+                    '4. 차단한 사용자의 모든 콘텐츠는 화면에서 즉시 영구 배제',
+                    style: TextStyle(fontSize: 12, height: 1.5, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () => showAppTermsDialog(context),
+                    child: const Text(
+                      '📜 서비스 이용약관(EULA) 전문 확인하기 >',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF2563EB), decoration: TextDecoration.underline),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await prefs.setBool('has_agreed_to_eula_v1', true);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('동의하고 시작하기', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error checking EULA consent: $e');
+    }
   }
 
   void _startOrUpdateNotificationListener() {
@@ -2174,7 +2304,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               onSelected: (action) {
                                 if (action == 'hide') {
                                   setState(() {
-                                    gHiddenContentIds.add(comment.id);
+                                    hideContentPermanently(comment.id);
                                   });
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -2193,7 +2323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     currentReportCount: comment.reportCount,
                                     onReportSuccess: (reason) {
                                       setState(() {
-                                        gHiddenContentIds.add(comment.id);
+                                        hideContentPermanently(comment.id);
                                         comment.reportedUserIds.add(currentUserId);
                                         comment.reportCount += 1;
                                         if (comment.reportCount >= 3) {
@@ -4052,7 +4182,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                       onSelected: (val) {
                         if (val == 'hide') {
                           setState(() {
-                            gHiddenContentIds.add(post.id);
+                            hideContentPermanently(post.id);
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -4077,7 +4207,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                             currentReportCount: post.reportCount,
                             onReportSuccess: (reason) {
                               setState(() {
-                                gHiddenContentIds.add(post.id);
+                                hideContentPermanently(post.id);
                                 post.reportCount += 1;
                                 post.reportedUserIds.add(currentUserId);
                                 if (post.reportCount >= 3) {
@@ -5221,7 +5351,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                   onSelected: (val) {
                     if (val == 'hide') {
                       setState(() {
-                        gHiddenContentIds.add(review.id);
+                        hideContentPermanently(review.id);
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -5247,7 +5377,7 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                         currentReportCount: review.reportCount,
                         onReportSuccess: (reason) {
                           setState(() {
-                            gHiddenContentIds.add(review.id);
+                            hideContentPermanently(review.id);
                             review.reportCount += 1;
                             review.reportedUserIds.add(currentUserId);
                             if (review.reportCount >= 3) {
@@ -7392,7 +7522,7 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                                 onSelected: (action) {
                                   if (action == 'hide') {
                                     setState(() {
-                                      gHiddenContentIds.add(c.id);
+                                      hideContentPermanently(c.id);
                                     });
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
@@ -7411,7 +7541,7 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                                       currentReportCount: c.reportCount,
                                       onReportSuccess: (reason) {
                                         setState(() {
-                                          gHiddenContentIds.add(c.id);
+                                          hideContentPermanently(c.id);
                                           c.reportedUserIds.add(currentUserId);
                                           c.reportCount += 1;
                                           if (c.reportCount >= 3) {
@@ -9627,10 +9757,32 @@ void showAppPrivacyDialog(BuildContext context) {
 // -------------------------------------------------------------
 // OAuth 소셜 로그인 화면 (카카오 • 네이버 • Apple • Google 전용)
 // -------------------------------------------------------------
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  bool _eulaAgreed = true;
+
   void _handleSocialLogin(BuildContext context, SocialAuthProvider provider) async {
+    if (!_eulaAgreed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFDC2626),
+          content: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(child: Text('서비스 이용약관(EULA) 및 무관용 정책에 동의해주세요.')),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
     UserProfile? profile;
     if (provider == SocialAuthProvider.kakao) {
       profile = await AppFirebaseService.instance.signInWithKakao();
@@ -9723,6 +9875,59 @@ class LoginScreen extends StatelessWidget {
               ),
 
               const Spacer(),
+
+              // 🛡️ Apple Guideline 1.2: 필수 EULA 및 무관용 정책 명시적 동의 체크박스
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _eulaAgreed ? const Color(0xFF60A5FA).withValues(alpha: 0.4) : Colors.red.shade400,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: _eulaAgreed,
+                      activeColor: const Color(0xFF2563EB),
+                      checkColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      onChanged: (val) {
+                        setState(() {
+                          _eulaAgreed = val ?? false;
+                        });
+                      },
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _eulaAgreed = !_eulaAgreed;
+                          });
+                        },
+                        child: const Text(
+                          '[필수] 이용약관(EULA) 및 무관용(Zero-Tolerance) 원칙 동의',
+                          style: TextStyle(fontSize: 11.5, color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => showAppTermsDialog(context),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        '보기',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFF93C5FD), decoration: TextDecoration.underline),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
 
               // 1. 카카오 로그인 버튼 (#FEE500)
               _buildSocialButton(
@@ -10291,7 +10496,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
               onSelected: (val) {
                 if (val == 'hide') {
                   setState(() {
-                    gHiddenContentIds.add(post.id);
+                    hideContentPermanently(post.id);
                   });
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -10318,7 +10523,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                     currentReportCount: post.reportCount,
                     onReportSuccess: (reason) {
                       setState(() {
-                        gHiddenContentIds.add(post.id);
+                        hideContentPermanently(post.id);
                         post.reportCount += 1;
                         post.reportedUserIds.add(currentUserId);
                         if (post.reportCount >= 3) {
