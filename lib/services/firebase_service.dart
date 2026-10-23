@@ -51,7 +51,7 @@ class AppFirebaseService {
   }
 
   // -------------------------------------------------------------
-  // 🔑 소셜 로그인 (카카오 / Apple / 네이버)
+  // 🔑 소셜 로그인 (카카오 / Apple / Google)
   // -------------------------------------------------------------
   Future<UserProfile?> signInWithApple() async {
     try {
@@ -143,12 +143,6 @@ class AppFirebaseService {
       debugPrint('Kakao Sign In error (or cancelled): $e');
       return null;
     }
-  }
-
-  Future<UserProfile?> signInWithNaver() async {
-    // 네이버는 네이버 개발자 센터 Client ID 및 URL Scheme 연동 후 활성화됩니다.
-    debugPrint('Naver Sign In: pending developer center credentials setup');
-    return null;
   }
 
   Future<UserProfile?> signInWithGoogle() async {

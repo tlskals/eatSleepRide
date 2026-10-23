@@ -436,12 +436,11 @@ Future<void> hideContentPermanently(String id) async {
 
 
 // -------------------------------------------------------------
-// OAuth 소셜 인증 및 사용자 프로필 모델 (카카오, 네이버, 애플 전용)
+// OAuth 소셜 인증 및 사용자 프로필 모델 (카카오, Apple, Google 전용)
 // -------------------------------------------------------------
 
 enum SocialAuthProvider {
   kakao,
-  naver,
   apple,
   google,
 }
@@ -589,8 +588,6 @@ class UserProfile {
     switch (provider) {
       case SocialAuthProvider.kakao:
         return '카카오 계정 연동';
-      case SocialAuthProvider.naver:
-        return '네이버 계정 연동';
       case SocialAuthProvider.apple:
         return 'Apple ID 연동';
       case SocialAuthProvider.google:
@@ -602,8 +599,6 @@ class UserProfile {
     switch (provider) {
       case SocialAuthProvider.kakao:
         return const Color(0xFFFEE500);
-      case SocialAuthProvider.naver:
-        return const Color(0xFF03C75A);
       case SocialAuthProvider.apple:
         return Colors.black;
       case SocialAuthProvider.google:
@@ -615,7 +610,6 @@ class UserProfile {
     switch (provider) {
       case SocialAuthProvider.kakao:
         return const Color(0xFF191919);
-      case SocialAuthProvider.naver:
       case SocialAuthProvider.apple:
         return Colors.white;
       case SocialAuthProvider.google:
@@ -8169,10 +8163,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Text('🔒 개인정보 비공개 철칙', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A))),
                         SizedBox(height: 6),
                         Text(
-                          '• 카카오, 네이버, Apple OAuth는 오직 안전한 본인 인증 및 어뷰징 방지 목적으로만 사용됩니다.\n'
+                          '• 카카오, Apple, Google OAuth는 오직 안전한 본인 인증 및 어뷰징 방지 목적으로만 사용됩니다.\n'
                           '• 실명, 전화번호, 이메일은 다른 사용자 및 슬로프 메이트에게 절대 공개되지 않습니다.\n'
-                          '• 모든 매칭 및 대화방은 익명 닉네임으로 안전하게 진행됩니다.\n'
-                          '• 구글 로그인은 정책상 비허용 처리되어 있습니다.',
+                          '• 모든 매칭 및 대화방은 익명 닉네임으로 안전하게 진행됩니다.',
                           style: TextStyle(fontSize: 12.5, color: Colors.black87, height: 1.5),
                         ),
                       ],
@@ -9089,7 +9082,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '카카오, 네이버, Apple 소셜 계정으로\n3초 만에 안전하게 시작해보세요.',
+              '카카오, Apple, Google 소셜 계정으로\n3초 만에 안전하게 시작해보세요.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13.5, color: Colors.grey.shade600, height: 1.4),
             ),
@@ -9174,9 +9167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Text(
                         user.provider == SocialAuthProvider.kakao
                             ? 'K'
-                            : (user.provider == SocialAuthProvider.naver
-                                ? 'N'
-                                : (user.provider == SocialAuthProvider.google ? 'G' : '')),
+                            : (user.provider == SocialAuthProvider.google ? 'G' : ''),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -9223,11 +9214,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           fontWeight: FontWeight.bold,
                           color: user.provider == SocialAuthProvider.kakao
                               ? const Color(0xFF854D0E)
-                              : (user.provider == SocialAuthProvider.naver
-                                  ? const Color(0xFF15803D)
-                                  : (user.provider == SocialAuthProvider.google
-                                      ? const Color(0xFF1E3A8A)
-                                      : Colors.black87)),
+                              : (user.provider == SocialAuthProvider.google
+                                  ? const Color(0xFF1E3A8A)
+                                  : Colors.black87),
                         ),
                       ),
                     ),
@@ -9669,7 +9658,7 @@ void showAppPrivacyDialog(BuildContext context) {
           child: Text(
             '같이타요(Eat Sleep Ride)는 이용자의 소중한 개인정보를 보호하며, 관련 법령 및 Apple 개인정보 보호 가이드라인을 철저히 준수합니다.\n\n'
             '1. 수집 항목 및 방법\n'
-            '• 소셜 인증(Apple, Google, Kakao, Naver)을 통한 고유 식별자(UID), 이메일, 닉네임만 수집하며 주민번호, 실명, 전화번호는 수집하지 않습니다.\n\n'
+            '• 소셜 인증(카카오, Apple, Google)을 통한 고유 식별자(UID), 이메일, 닉네임만 수집하며 주민번호, 실명, 전화번호는 수집하지 않습니다.\n\n'
             '2. 이용 목적\n'
             '• 회원 식별, 스키장 동행 매칭 및 실시간 단체 채팅 서비스 제공, 푸시 알림 발송.\n\n'
             '3. 인앱 회원탈퇴 및 즉시 영구 파기 (가이드라인 5.1.1(v))\n'
@@ -9695,7 +9684,7 @@ void showAppPrivacyDialog(BuildContext context) {
 }
 
 // -------------------------------------------------------------
-// OAuth 소셜 로그인 화면 (카카오 • 네이버 • Apple • Google 전용)
+// OAuth 소셜 로그인 화면 (카카오 • Apple • Google 전용)
 // -------------------------------------------------------------
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9730,8 +9719,6 @@ class _LoginScreenState extends State<LoginScreen> {
       profile = await AppFirebaseService.instance.signInWithApple();
     } else if (provider == SocialAuthProvider.google) {
       profile = await AppFirebaseService.instance.signInWithGoogle();
-    } else {
-      profile = await AppFirebaseService.instance.signInWithNaver();
     }
 
     if (context.mounted) {
@@ -9751,13 +9738,9 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF334155),
-            content: Text(
-              provider == SocialAuthProvider.naver
-                  ? '네이버 로그인은 현재 개발자 센터 연동 준비 중입니다. 카카오, Apple 또는 Google 로그인을 이용해주세요.'
-                  : '로그인이 취소되었거나 인증에 실패했습니다.',
-            ),
+          const SnackBar(
+            backgroundColor: Color(0xFF334155),
+            content: Text('로그인이 취소되었거나 인증에 실패했습니다.'),
           ),
         );
       }
@@ -9922,30 +9905,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 bgColor: Colors.white,
                 textColor: const Color(0xFF1F1F1F),
                 iconWidget: _buildGoogleLogo(size: 20),
-              ),
-              const SizedBox(height: 12),
-
-              // 4. 네이버 로그인 버튼 (#03C75A)
-              _buildSocialButton(
-                context: context,
-                provider: SocialAuthProvider.naver,
-                title: '네이버로 시작하기',
-                bgColor: const Color(0xFF03C75A),
-                textColor: Colors.white,
-                iconWidget: Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'N',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white),
-                    ),
-                  ),
-                ),
               ),
 
               const SizedBox(height: 18),
