@@ -24,7 +24,7 @@ void main() async {
 
   // 🟡 카카오 SDK 초기화
   KakaoSdk.init(
-    nativeAppKey: '907c46e5306c3e6f119f8f307c00cfc1',
+    nativeAppKey: 'c6a747117409de895acefc4b77fa969c',
   );
 
   // 🛡️ Apple Guideline 1.2: 로컬 숨김/차단 캐시 복원
