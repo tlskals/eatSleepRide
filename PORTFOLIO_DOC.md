@@ -215,7 +215,7 @@ Flutter & Firebase 기반 풀스택 1인 개발 | App Store & Google Play 정식
 - Phase 4 (5주차: 09.28 ~ 10.05) : 양대 스토어 심사 통과 및 정식 출시
   - Apple App Store Guideline 1.2 (UGC 안전 수칙 8대 항목) 소명 완료 및 최종 승인
   - 새벽 점검(03:00~08:00) 작성 제한 및 08:00 데이터 갱신 로직 적용
-  - iOS & Android 정식 릴리즈 패키징 완료 (Build 8)
+  - iOS & Android 정식 릴리즈 패키징 완료 (Build 9 - v1.0.0+9)
 
 ---
 
