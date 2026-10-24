@@ -4320,6 +4320,11 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   @override
   void initState() {
     super.initState();
+    // 새벽 03:00 ~ 06:00 접속 시 야간 잔여 대기열 자동 플러시
+    final now = DateTime.now();
+    if (now.hour >= 3 && now.hour < 6) {
+      AppFirebaseService.instance.flushAllMatchQueues();
+    }
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -4334,6 +4339,9 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
     _tickerTimer?.cancel();
     _queueSubscription?.cancel();
     _statusSubscription?.cancel();
+    if (_isMatching && gCurrentUser != null) {
+      AppFirebaseService.instance.leaveMatchQueue(_selectedResort.id, gCurrentUser!.id);
+    }
     _pulseController.dispose();
     super.dispose();
   }
@@ -4422,8 +4430,84 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
     );
   }
 
+  void _showMidnightClosedDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Row(
+          children: [
+            Icon(Icons.nightlight_round, color: Colors.indigo, size: 24),
+            SizedBox(width: 8),
+            Text('심야 정설 및 휴장 시간', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          '새벽 03:00 ~ 06:00은 슬로프 정설 및 심야 휴장 시간입니다.\n\n안전한 라이딩을 위해 이 시간대에는 랜덤 매칭이 제한됩니다. 오전 슬로프 오픈 시 다시 이용해 주세요 ⛷️',
+          style: TextStyle(fontSize: 13.5, color: Colors.black87, height: 1.45),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleMidnightShutdown() {
+    _cancelMatching(leaveQueue: true);
+    // 03:00 정각 전 스키장 대기열 일괄 플러시
+    AppFirebaseService.instance.flushAllMatchQueues();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Row(
+          children: [
+            Icon(Icons.nightlight_round, color: Colors.indigo, size: 24),
+            SizedBox(width: 8),
+            Text('심야 운영 마감 (03:00)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text(
+          '새벽 03:00 심야 슬로프 운영이 마감되어 모든 매칭 대기열이 종료되었습니다.\n\n매칭 기회는 차감되지 않으며, 오전 슬로프 오픈 시 다시 매칭에 참여하실 수 있습니다 ⛷️',
+          style: TextStyle(fontSize: 13.5, color: Colors.black87, height: 1.45),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _startMatching() {
     if (!ensureUserLoggedIn(context, actionName: '4인 랜덤 매칭')) return;
+
+    // 0. 🌙 새벽 03:00 ~ 06:00 슬로프 정설/휴장 시간 체크
+    final now = DateTime.now();
+    if (now.hour >= 3 && now.hour < 6) {
+      _showMidnightClosedDialog();
+      return;
+    }
 
     if (gDailyRandomMatchRemaining <= 0) {
       _showDailyLimitExceededDialog();
@@ -4447,6 +4531,19 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
       setState(() {
         _elapsedSeconds++;
       });
+
+      final tickNow = DateTime.now();
+      // 1) ⚡️ 새벽 03:00 정각 세션 종료 감지 시 강제 튕김 및 대기열 플러시
+      if (tickNow.hour >= 3 && tickNow.hour < 6) {
+        _handleMidnightShutdown();
+        return;
+      }
+
+      // 2) ⚡️ 15분 (900초) 대기 시간 초과 시 자동 퇴장 및 알림 모달
+      if (_elapsedSeconds >= 900) {
+        _handleMatchTimeout();
+        return;
+      }
     });
 
     // 1. 실제 Firestore 실시간 대기 큐 등록
@@ -4462,6 +4559,12 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
     _queueSubscription?.cancel();
     _queueSubscription = AppFirebaseService.instance.streamMatchQueue(_selectedResort.id).listen((riders) {
       if (!mounted || !_isMatching) return;
+      final myId = currentUser.id;
+      final stillInQueue = riders.any((r) => r['uid'] == myId || r['id'] == myId);
+      if (!stillInQueue && _elapsedSeconds > 10) {
+        _handleMatchTimeout();
+        return;
+      }
       setState(() {
         _matchedCount = riders.length.clamp(1, 4);
         _currentQueue.clear();
@@ -4502,6 +4605,64 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
         );
       }
     });
+  }
+
+  void _handleMatchTimeout() {
+    final targetResort = _selectedResort;
+    _cancelMatching(leaveQueue: true);
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          title: const Row(
+            children: [
+              Icon(Icons.timer_off_rounded, color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Text('대기 시간 종료', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '대기 시간이 초과되어 매칭이 종료되었습니다.',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '15분 동안 [${targetResort.shortName}] 대기 인원(4명)이 모이지 않아 안전하게 대기열에서 퇴장되었습니다.\n\n동일한 스키장으로 바로 다시 매칭을 시작하시겠습니까?',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('닫기', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _selectedResort = targetResort;
+                _startMatching();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('재매칭'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _cancelMatching({bool leaveQueue = true}) {

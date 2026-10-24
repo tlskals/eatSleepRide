@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
@@ -109,7 +110,15 @@ class AppFirebaseService {
       }
 
       if (isInstalled) {
-        await kakao.UserApi.instance.loginWithKakaoTalk();
+        try {
+          await kakao.UserApi.instance.loginWithKakaoTalk();
+        } catch (e) {
+          debugPrint('KakaoTalk app login failed or not logged in, falling back to Kakao Account: $e');
+          if (e is PlatformException && e.code == 'CANCELED') {
+            return null;
+          }
+          await kakao.UserApi.instance.loginWithKakaoAccount();
+        }
       } else {
         await kakao.UserApi.instance.loginWithKakaoAccount();
       }
@@ -716,7 +725,18 @@ class AppFirebaseService {
         .collection('riders')
         .orderBy('joinedAt', descending: false)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+        .map((snapshot) {
+      final now = DateTime.now();
+      return snapshot.docs
+          .map((d) => {'id': d.id, ...d.data()})
+          .where((r) {
+            final joinedAt = (r['joinedAt'] as Timestamp?)?.toDate();
+            if (joinedAt == null) return true;
+            // 15분 이상 지난 방치 세션은 대기열에서 자동 제외
+            return now.difference(joinedAt).inMinutes < 15;
+          })
+          .toList();
+    });
   }
 
   Stream<Map<String, dynamic>?> streamUserMatchStatus(String uid) {
@@ -754,6 +774,23 @@ class AppFirebaseService {
     required String nickname,
   }) async {
     try {
+      // 0-0. ⚡️ 15분 이상 경과한 유령 대기자(비정상 종료 등) 자동 정리
+      try {
+        final existingQueue = await _firestore
+            .collection('random_match_queues')
+            .doc(resortId)
+            .collection('riders')
+            .get();
+        final now = DateTime.now();
+        for (final doc in existingQueue.docs) {
+          final joined = (doc.data()['joinedAt'] as Timestamp?)?.toDate();
+          if (joined != null && now.difference(joined).inMinutes >= 15) {
+            await doc.reference.delete();
+          }
+        }
+      } catch (e) {
+        debugPrint('stale queue cleanup error: $e');
+      }
       // 0. ⚡️ 충원을 기다리는 기존 4인 매칭 방이 있는지 먼저 확인 (빈자리 우선 배정)
       final refillSnap = await _firestore
           .collection('gatherings')
@@ -923,6 +960,30 @@ class AppFirebaseService {
       await _firestore.collection('user_match_status').doc(uid).delete();
     } catch (e) {
       debugPrint('leaveMatchQueue error: $e');
+    }
+  }
+
+  /// 🌙 새벽 03:00 심야 세션 종료: 전국 모든 스키장 대기열 문서 일괄 강제 삭제 (Batch Flush)
+  Future<void> flushAllMatchQueues() async {
+    const resortIds = ['gonjiam', 'vivaldi', 'yongpyong'];
+    try {
+      for (final id in resortIds) {
+        final ridersSnap = await _firestore
+            .collection('random_match_queues')
+            .doc(id)
+            .collection('riders')
+            .get();
+        if (ridersSnap.docs.isNotEmpty) {
+          final batch = _firestore.batch();
+          for (final doc in ridersSnap.docs) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
+        }
+      }
+      debugPrint('🌙 [03:00 세션종료] 전국 스키장 랜덤 매칭 대기열 일괄 플러시 완료');
+    } catch (e) {
+      debugPrint('flushAllMatchQueues error: $e');
     }
   }
 
