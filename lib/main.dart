@@ -7892,19 +7892,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _eventNotification = gCurrentUser?.eventNotification ?? true;
   }
 
-  // 이미 사용 중인 닉네임 목록 (중복 체크용)
-  final List<String> _takenNicknames = [
-    '평창눈사람',
-    '곤지암라이더',
-    '익명의보더',
-    '용평파우더',
-    '비발디보더',
-    '하이원질주',
-    '설질마스터',
-  ];
-
   // -------------------------------------------------------------
-  // 닉네임 변경 및 중복 체크 다이얼로그
+  // 닉네임 변경 및 서버 실시간 중복 체크 다이얼로그
   // -------------------------------------------------------------
   void _showEditNicknameDialog() {
     final user = gCurrentUser;
@@ -7912,6 +7901,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final controller = TextEditingController(text: user.nickname);
     bool isDuplicateChecked = false;
+    bool isChecking = false;
     bool isAvailable = false;
     String statusMessage = '';
     Color statusColor = Colors.grey;
@@ -7954,7 +7944,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             controller: controller,
                             maxLength: 10,
                             onChanged: (_) {
-                              if (isDuplicateChecked) {
+                              if (isDuplicateChecked || isAvailable) {
                                 setDialogState(() {
                                   isDuplicateChecked = false;
                                   isAvailable = false;
@@ -7981,44 +7971,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SizedBox(
                           height: 48,
                           child: ElevatedButton(
-                            onPressed: () {
-                              final input = controller.text.trim();
-                              if (input.length < 2) {
-                                setDialogState(() {
-                                  isDuplicateChecked = true;
-                                  isAvailable = false;
-                                  statusMessage = '2글자 이상 입력해주세요.';
-                                  statusColor = Colors.red.shade700;
-                                });
-                                return;
-                              }
+                            onPressed: isChecking
+                                ? null
+                                : () async {
+                                    final input = controller.text.trim();
+                                    if (input.length < 2) {
+                                      setDialogState(() {
+                                        isDuplicateChecked = true;
+                                        isAvailable = false;
+                                        statusMessage = '2글자 이상 입력해주세요.';
+                                        statusColor = Colors.red.shade700;
+                                      });
+                                      return;
+                                    }
 
-                              if (input == user.nickname) {
-                                setDialogState(() {
-                                  isDuplicateChecked = true;
-                                  isAvailable = true;
-                                  statusMessage = '현재 사용 중인 닉네임입니다.';
-                                  statusColor = Colors.green.shade700;
-                                });
-                                return;
-                              }
+                                    if (input == user.nickname) {
+                                      setDialogState(() {
+                                        isDuplicateChecked = true;
+                                        isAvailable = true;
+                                        statusMessage = '현재 사용 중인 본인의 닉네임입니다.';
+                                        statusColor = Colors.green.shade700;
+                                      });
+                                      return;
+                                    }
 
-                              if (_takenNicknames.contains(input)) {
-                                setDialogState(() {
-                                  isDuplicateChecked = true;
-                                  isAvailable = false;
-                                  statusMessage = '이미 사용 중인 닉네임입니다.';
-                                  statusColor = Colors.red.shade700;
-                                });
-                              } else {
-                                setDialogState(() {
-                                  isDuplicateChecked = true;
-                                  isAvailable = true;
-                                  statusMessage = '사용 가능한 닉네임입니다.';
-                                  statusColor = Colors.green.shade700;
-                                });
-                              }
-                            },
+                                    setDialogState(() {
+                                      isChecking = true;
+                                      statusMessage = '서버에서 중복 확인 중...';
+                                      statusColor = Colors.grey;
+                                    });
+
+                                    final available = await AppFirebaseService.instance.isNicknameAvailable(input, excludeUid: user.id);
+
+                                    setDialogState(() {
+                                      isChecking = false;
+                                      isDuplicateChecked = true;
+                                      isAvailable = available;
+                                      if (available) {
+                                        statusMessage = '사용 가능한 닉네임입니다.';
+                                        statusColor = Colors.green.shade700;
+                                      } else {
+                                        statusMessage = '이미 다른 라이더가 사용 중인 닉네임입니다.';
+                                        statusColor = Colors.red.shade700;
+                                      }
+                                    });
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2563EB),
                               foregroundColor: Colors.white,
@@ -8026,7 +8023,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            child: const Text('중복 확인', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            child: isChecking
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Text('중복 확인', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],
@@ -8047,20 +8046,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: const Text('취소', style: TextStyle(color: Colors.grey)),
                 ),
                 ElevatedButton(
-                  onPressed: isAvailable
-                      ? () {
+                  onPressed: (isAvailable && !isChecking)
+                      ? () async {
                           final newName = controller.text.trim();
                           setState(() {
                             user.nickname = newName;
                           });
-                          AppFirebaseService.instance.saveUserProfile(user);
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: const Color(0xFF1E3A8A),
-                              content: Text('익명 닉네임이 "$newName"으로 안전하게 변경되었습니다.'),
-                            ),
-                          );
+                          await AppFirebaseService.instance.saveUserProfile(user);
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: const Color(0xFF1E3A8A),
+                                content: Text('익명 닉네임이 "$newName"으로 안전하게 변경되었습니다.'),
+                              ),
+                            );
+                          }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(

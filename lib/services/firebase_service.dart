@@ -72,15 +72,34 @@ class AppFirebaseService {
       final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user;
       final uniqueId = user?.uid ?? appleCredential.userIdentifier ?? currentUid;
+
+      // 🔍 1. 기존에 Firestore에 등록된 유저인지 먼저 확인 (닉네임/설정 유지!)
+      final existingProfile = await fetchUserProfile(uniqueId);
+      if (existingProfile != null) {
+        gCurrentUser = existingProfile;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_user_profile_json', jsonEncode(existingProfile.toJson()));
+        unawaited(NotificationService.instance.syncTokenForUser(existingProfile.id));
+        debugPrint('Apple 로그인 성공 (기존 회원 복원): ${existingProfile.nickname} (${existingProfile.id})');
+        return existingProfile;
+      }
+
+      // 2. 최초 신규 가입자일 때만 기본 프로필 생성
       final givenName = appleCredential.givenName;
+      String candidateNick = (givenName != null && givenName.isNotEmpty)
+          ? '$givenName 라이더'
+          : '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "appl"}';
+
+      final isAvail = await isNicknameAvailable(candidateNick);
+      if (!isAvail) {
+        candidateNick = '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "appl"}';
+      }
 
       final profile = UserProfile(
         id: uniqueId,
         provider: SocialAuthProvider.apple,
         email: appleCredential.email ?? user?.email ?? 'apple_user@icloud.com',
-        nickname: (givenName != null && givenName.isNotEmpty)
-            ? '$givenName 라이더'
-            : '익명의라이더#${uniqueId.length >= 4 ? uniqueId.substring(uniqueId.length - 4) : "appl"}',
+        nickname: candidateNick,
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
@@ -125,16 +144,36 @@ class AppFirebaseService {
 
       kakao.User kakaoUser = await kakao.UserApi.instance.me();
       final kakaoId = kakaoUser.id.toString();
+      final targetUid = 'kakao_$kakaoId';
+
+      // 🔍 1. 기존에 Firestore에 등록된 유저인지 먼저 확인 (닉네임/설정 유지!)
+      final existingProfile = await fetchUserProfile(targetUid);
+      if (existingProfile != null) {
+        gCurrentUser = existingProfile;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_user_profile_json', jsonEncode(existingProfile.toJson()));
+        unawaited(NotificationService.instance.syncTokenForUser(existingProfile.id));
+        debugPrint('Kakao 로그인 성공 (기존 회원 복원): ${existingProfile.nickname} (${existingProfile.id})');
+        return existingProfile;
+      }
+
+      // 2. 최초 신규 가입자일 때만 기본 프로필 생성
       final email = kakaoUser.kakaoAccount?.email ?? 'kakao_$kakaoId@kakao.com';
       final kakaoNick = kakaoUser.kakaoAccount?.profile?.nickname;
+      String candidateNick = (kakaoNick != null && kakaoNick.isNotEmpty)
+          ? kakaoNick
+          : '익명의라이더#${kakaoId.length >= 4 ? kakaoId.substring(kakaoId.length - 4) : kakaoId}';
+
+      final isAvail = await isNicknameAvailable(candidateNick);
+      if (!isAvail) {
+        candidateNick = '익명의라이더#${kakaoId.length >= 4 ? kakaoId.substring(kakaoId.length - 4) : kakaoId}';
+      }
 
       final profile = UserProfile(
-        id: 'kakao_$kakaoId',
+        id: targetUid,
         provider: SocialAuthProvider.kakao,
         email: email,
-        nickname: (kakaoNick != null && kakaoNick.isNotEmpty)
-            ? kakaoNick
-            : '익명의라이더#${kakaoId.length >= 4 ? kakaoId.substring(kakaoId.length - 4) : kakaoId}',
+        nickname: candidateNick,
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
@@ -172,16 +211,35 @@ class AppFirebaseService {
       final userCredential = await _auth.signInWithCredential(credential);
       final user = userCredential.user;
       final uid = user?.uid ?? 'google_${googleUser.id}';
+
+      // 🔍 1. 기존에 Firestore에 등록된 유저인지 먼저 확인 (닉네임/설정 유지!)
+      final existingProfile = await fetchUserProfile(uid);
+      if (existingProfile != null) {
+        gCurrentUser = existingProfile;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('saved_user_profile_json', jsonEncode(existingProfile.toJson()));
+        unawaited(NotificationService.instance.syncTokenForUser(existingProfile.id));
+        debugPrint('Google 로그인 성공 (기존 회원 복원): ${existingProfile.nickname} (${existingProfile.id})');
+        return existingProfile;
+      }
+
+      // 2. 최초 신규 가입자일 때만 기본 프로필 생성
       final email = googleUser.email;
       final name = googleUser.displayName;
+      String candidateNick = (name != null && name.isNotEmpty)
+          ? name
+          : '익명의라이더#${uid.length >= 4 ? uid.substring(uid.length - 4) : "goog"}';
+
+      final isAvail = await isNicknameAvailable(candidateNick);
+      if (!isAvail) {
+        candidateNick = '익명의라이더#${uid.length >= 4 ? uid.substring(uid.length - 4) : "goog"}';
+      }
 
       final profile = UserProfile(
         id: uid,
         provider: SocialAuthProvider.google,
         email: email,
-        nickname: (name != null && name.isNotEmpty)
-            ? name
-            : '익명의라이더#${uid.length >= 4 ? uid.substring(uid.length - 4) : "goog"}',
+        nickname: candidateNick,
         preferredDiscipline: '스노보드',
         homeResort: '휘닉스파크',
         level: '중급',
@@ -201,6 +259,88 @@ class AppFirebaseService {
     }
   }
 
+  // -------------------------------------------------------------
+  // 🔍 닉네임 서버 중복 체크 (Firestore users 컬렉션 실시간 질의)
+  // -------------------------------------------------------------
+  Future<bool> isNicknameAvailable(String nickname, {String? excludeUid}) async {
+    final clean = nickname.trim();
+    if (clean.length < 2 || clean.length > 10) return false;
+
+    // 시스템 예약어 / 관리자 사칭 방지
+    final lower = clean.toLowerCase();
+    if (lower == '시스템' ||
+        lower == '관리자' ||
+        lower == 'admin' ||
+        lower == '운영자' ||
+        lower.startsWith('관리자') ||
+        lower.startsWith('운영자')) {
+      return false;
+    }
+
+    try {
+      final query = await _firestore
+          .collection('users')
+          .where('nickname', isEqualTo: clean)
+          .limit(2)
+          .get()
+          .timeout(const Duration(seconds: 4));
+
+      for (var doc in query.docs) {
+        if (excludeUid != null && doc.id == excludeUid) {
+          continue; // 내 계정의 현재 닉네임이면 중복 아님
+        }
+        return false; // 이미 다른 사용자가 선점한 닉네임
+      }
+      return true; // 사용 가능
+    } catch (e) {
+      debugPrint('Firestore isNicknameAvailable error: $e');
+      return false;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🔍 Firestore 서버에서 유저 프로필 조회 (신규/기존 판별 및 복원)
+  // -------------------------------------------------------------
+  Future<UserProfile?> fetchUserProfile(String uid) async {
+    try {
+      final docSnapshot = await _firestore.collection('users').doc(uid).get().timeout(const Duration(seconds: 4));
+      if (docSnapshot.exists && docSnapshot.data() != null) {
+        final data = docSnapshot.data()!;
+        return UserProfile(
+          id: uid,
+          provider: SocialAuthProvider.values.firstWhere(
+            (p) => p.name == (data['provider'] ?? 'kakao'),
+            orElse: () => SocialAuthProvider.kakao,
+          ),
+          email: data['email'] ?? '',
+          nickname: data['nickname'] ?? '익명의라이더#${uid.length >= 4 ? uid.substring(uid.length - 4) : uid}',
+          preferredDiscipline: data['preferredDiscipline'] ?? '스노보드',
+          homeResort: data['homeResort'] ?? '비발디파크',
+          level: data['level'] ?? '초중급',
+          joinedAt: (data['joinedAt'] is Timestamp)
+              ? (data['joinedAt'] as Timestamp).toDate()
+              : DateTime.now(),
+          completedRidesCount: data['completedRidesCount'] ?? 0,
+          taggedReviewsCount: data['taggedReviewsCount'] ?? 0,
+          snowPoints: data['snowPoints'] ?? 0,
+          riderTitle: data['riderTitle'] ?? '비기너 라이더 🏂',
+          blockedUsers: (List<String>.from(data['blockedUsers'] ?? []))
+              .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
+              .toList(),
+          eventNotification: data['eventNotification'] ?? true,
+          eventConsentDate: (data['eventConsentDate'] is Timestamp)
+              ? (data['eventConsentDate'] as Timestamp).toDate()
+              : null,
+          lastSnowPointDate: (data['lastSnowPointDate'] is Timestamp)
+              ? (data['lastSnowPointDate'] as Timestamp).toDate()
+              : null,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error fetching user profile for $uid: $e');
+    }
+    return null;
+  }
 
   // -------------------------------------------------------------
   // 1. 유저 프로필 로컬 및 클라우드 동기화 (자동 로그인 세션 유지)
@@ -234,40 +374,8 @@ class AppFirebaseService {
       }
 
       final uid = user.uid;
-      final userDocRef = _firestore.collection('users').doc(uid);
-      final docSnapshot = await userDocRef.get().timeout(const Duration(seconds: 3));
-
-      if (docSnapshot.exists && docSnapshot.data() != null) {
-        final data = docSnapshot.data()!;
-        final loadedProfile = UserProfile(
-          id: uid,
-          provider: SocialAuthProvider.values.firstWhere(
-            (p) => p.name == (data['provider'] ?? 'kakao'),
-            orElse: () => SocialAuthProvider.kakao,
-          ),
-          email: data['email'] ?? 'rider@eatsleepride.app',
-          nickname: data['nickname'] ?? '익명의라이더#${uid.length >= 4 ? uid.substring(uid.length - 4) : uid}',
-          preferredDiscipline: data['preferredDiscipline'] ?? '스노보드',
-          homeResort: data['homeResort'] ?? '비발디파크',
-          level: data['level'] ?? '중급',
-          joinedAt: (data['joinedAt'] is Timestamp)
-              ? (data['joinedAt'] as Timestamp).toDate()
-              : DateTime.now(),
-          completedRidesCount: data['completedRidesCount'] ?? 0,
-          taggedReviewsCount: data['taggedReviewsCount'] ?? 0,
-          snowPoints: data['snowPoints'] ?? 0,
-          riderTitle: data['riderTitle'] ?? '비기너 라이더 🏂',
-          blockedUsers: (List<String>.from(data['blockedUsers'] ?? []))
-              .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
-              .toList(),
-          eventNotification: data['eventNotification'] ?? true,
-          eventConsentDate: (data['eventConsentDate'] is Timestamp)
-              ? (data['eventConsentDate'] as Timestamp).toDate()
-              : null,
-          lastSnowPointDate: (data['lastSnowPointDate'] is Timestamp)
-              ? (data['lastSnowPointDate'] as Timestamp).toDate()
-              : null,
-        );
+      final loadedProfile = await fetchUserProfile(uid);
+      if (loadedProfile != null) {
         gCurrentUser = loadedProfile;
         await saveUserProfile(loadedProfile);
         unawaited(NotificationService.instance.syncTokenForUser(loadedProfile.id));
@@ -290,6 +398,9 @@ class AppFirebaseService {
         final data = doc.data()!;
         if (gCurrentUser != null && gCurrentUser!.id == uid) {
           gCurrentUser!.nickname = data['nickname'] ?? gCurrentUser!.nickname;
+          gCurrentUser!.homeResort = data['homeResort'] ?? gCurrentUser!.homeResort;
+          gCurrentUser!.preferredDiscipline = data['preferredDiscipline'] ?? gCurrentUser!.preferredDiscipline;
+          gCurrentUser!.level = data['level'] ?? gCurrentUser!.level;
           gCurrentUser!.snowPoints = data['snowPoints'] ?? gCurrentUser!.snowPoints;
           gCurrentUser!.completedRidesCount = data['completedRidesCount'] ?? gCurrentUser!.completedRidesCount;
           gCurrentUser!.taggedReviewsCount = data['taggedReviewsCount'] ?? gCurrentUser!.taggedReviewsCount;
