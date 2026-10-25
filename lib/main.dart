@@ -486,11 +486,20 @@ class UserProfile {
   bool eventNotification; // 🎁 시즌 이벤트 및 혜택 알림 수신 동의 여부 (정보통신망법)
   DateTime? eventConsentDate; // 수신 동의/변경 일시
   DateTime? lastSnowPointDate;
+  DateTime? lastAttendanceDate; // 📅 매일 첫 접속 출석체크 일시
 
   bool get hasEarnedSnowPointToday {
     if (lastSnowPointDate == null) return false;
     final cutoff = AppFirebaseService.getDailySnowPointCutoffTime();
     return lastSnowPointDate!.isAfter(cutoff);
+  }
+
+  bool get hasCheckedInToday {
+    if (lastAttendanceDate == null) return false;
+    final now = DateTime.now();
+    return lastAttendanceDate!.year == now.year &&
+           lastAttendanceDate!.month == now.month &&
+           lastAttendanceDate!.day == now.day;
   }
 
   /// 🎖️ 동행 성사 횟수(completedRidesCount) 및 설질 포인트(snowPoints) 기준 실시간 자동 언락 뱃지
@@ -574,6 +583,7 @@ class UserProfile {
     this.eventNotification = true,
     this.eventConsentDate,
     this.lastSnowPointDate,
+    this.lastAttendanceDate,
   })  : riderTitle = riderTitle ?? '비기너 라이더 🏂',
         blockedUsers = blockedUsers ?? [];
 
@@ -699,6 +709,7 @@ class UserProfile {
       'eventNotification': eventNotification,
       'eventConsentDate': eventConsentDate?.toIso8601String(),
       'lastSnowPointDate': lastSnowPointDate?.toIso8601String(),
+      'lastAttendanceDate': lastAttendanceDate?.toIso8601String(),
     };
   }
 
@@ -739,16 +750,34 @@ class UserProfile {
       lastSnowPointDate: json['lastSnowPointDate'] != null
           ? DateTime.tryParse(json['lastSnowPointDate'])
           : null,
+      lastAttendanceDate: json['lastAttendanceDate'] != null
+          ? DateTime.tryParse(json['lastAttendanceDate'])
+          : null,
     );
   }
 }
 
-// 기본 로그인 사용자 (반응형 전역 상태)
-final ValueNotifier<UserProfile?> gCurrentUserNotifier = ValueNotifier<UserProfile?>(null);
+// -------------------------------------------------------------
+// 기본 로그인 사용자 (반응형 전역 상태 노티파이어)
+// -------------------------------------------------------------
+class CurrentUserNotifier extends ValueNotifier<UserProfile?> {
+  CurrentUserNotifier(super.value);
+
+  void notifyChanged() {
+    notifyListeners();
+  }
+}
+
+final CurrentUserNotifier gCurrentUserNotifier = CurrentUserNotifier(null);
 
 UserProfile? get gCurrentUser => gCurrentUserNotifier.value;
 set gCurrentUser(UserProfile? val) {
   gCurrentUserNotifier.value = val;
+  gCurrentUserNotifier.notifyChanged();
+}
+
+void notifyCurrentUserChanged() {
+  gCurrentUserNotifier.notifyChanged();
 }
 
 // 1일 랜덤 매칭 횟수 제한 (클린한 만남 & 어뷰징 방지)
@@ -1608,6 +1637,7 @@ class _MainScreenState extends State<MainScreen> {
     // 🛡️ Apple Guideline 1.2: 앱 최초 실행 시 EULA 및 무관용(Zero-Tolerance) 원칙 명시적 동의 모달
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstLaunchEulaConsent();
+      _checkDailyAttendance();
     });
   }
 
@@ -1708,6 +1738,49 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  Future<void> _checkDailyAttendance() async {
+    final awarded = await AppFirebaseService.instance.checkAndAwardDailyAttendance();
+    if (awarded && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          backgroundColor: const Color(0xFF1E3A8A),
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text('📅', style: TextStyle(fontSize: 18)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '오늘 첫 접속 출석체크 완료!',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.white),
+                    ),
+                    Text(
+                      '설질 파우더 포인트 +10P 적립 (현재 보유: ${gCurrentUser?.snowPoints ?? 0}P)',
+                      style: const TextStyle(fontSize: 11.5, color: Color(0xFFBFDBFE)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   void _startOrUpdateNotificationListener() {
     NotificationService.instance.startRealtimeNotificationListener(
       currentNickname: gCurrentUser?.nickname ?? '',
@@ -1754,6 +1827,9 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
+          if (index == 3 && gCurrentUser != null) {
+            unawaited(AppFirebaseService.instance.refreshUserProfile(gCurrentUser!.id));
+          }
           setState(() {
             _currentIndex = index;
           });
@@ -7890,6 +7966,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _eventNotification = gCurrentUser?.eventNotification ?? true;
+    if (gCurrentUser != null) {
+      unawaited(AppFirebaseService.instance.refreshUserProfile(gCurrentUser!.id));
+    }
   }
 
   // -------------------------------------------------------------
@@ -8882,59 +8961,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           body: user == null
               ? _buildLoggedOutView()
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. 소셜 로그인 계정 프로필 카드
-                      _buildProfileCard(user),
+              : RefreshIndicator(
+                  color: const Color(0xFF2563EB),
+                  onRefresh: () async {
+                    if (gCurrentUser != null) {
+                      await AppFirebaseService.instance.refreshUserProfile(gCurrentUser!.id);
+                      if (mounted) setState(() {});
+                    }
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. 소셜 로그인 계정 프로필 카드
+                        _buildProfileCard(user),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      // 2. 나의 슬로프 활동 지표 대시보드
-                      _buildSectionTitle('나의 슬로프 활동 지표 🏆'),
-                      const SizedBox(height: 8),
-                      _buildActivityDashboardCard(user),
+                        // 2. 나의 슬로프 활동 지표 대시보드
+                        _buildSectionTitle('나의 슬로프 활동 지표 🏆'),
+                        const SizedBox(height: 8),
+                        _buildActivityDashboardCard(user),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      // 3. 나의 슬로프 배지 보관함
-                      _buildSectionTitle('슬로프 배지 보관함 🎖️'),
-                      const SizedBox(height: 8),
-                      _buildBadgeCollectionCard(user),
+                        // 3. 나의 슬로프 배지 보관함
+                        _buildSectionTitle('슬로프 배지 보관함 🎖️'),
+                        const SizedBox(height: 8),
+                        _buildBadgeCollectionCard(user),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      // 4. 나의 라이딩 성향 설정
-                      _buildSectionTitle('나의 라이딩 설정 🏂'),
-                      const SizedBox(height: 8),
-                      _buildRidingPreferenceCard(user),
+                        // 4. 나의 라이딩 성향 설정
+                        _buildSectionTitle('나의 라이딩 설정 🏂'),
+                        const SizedBox(height: 8),
+                        _buildRidingPreferenceCard(user),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      // 5. 알림 및 보안 센터
-                      _buildSectionTitle('알림 & 익명성 보안 🔒'),
-                      const SizedBox(height: 8),
-                      _buildSecurityCard(),
+                        // 5. 알림 및 보안 센터
+                        _buildSectionTitle('알림 & 익명성 보안 🔒'),
+                        const SizedBox(height: 8),
+                        _buildSecurityCard(),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      // 6. 계정 관리
-                      _buildSectionTitle('계정 관리'),
-                      const SizedBox(height: 8),
-                      _buildAccountCard(user),
+                        // 6. 계정 관리
+                        _buildSectionTitle('계정 관리'),
+                        const SizedBox(height: 8),
+                        _buildAccountCard(user),
 
-                      const SizedBox(height: 30),
-                      Center(
-                        child: Text(
-                          '같이타요 v1.0.0 • 26/27 시즌\n카카오 • Apple 공식 OAuth 연동',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
+                        const SizedBox(height: 30),
+                        Center(
+                          child: Text(
+                            '같이타요 v1.0.0 • 26/27 시즌\n카카오 • Apple 공식 OAuth 연동',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                 ),
         );

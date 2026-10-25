@@ -334,6 +334,9 @@ class AppFirebaseService {
           lastSnowPointDate: (data['lastSnowPointDate'] is Timestamp)
               ? (data['lastSnowPointDate'] as Timestamp).toDate()
               : null,
+          lastAttendanceDate: (data['lastAttendanceDate'] is Timestamp)
+              ? (data['lastAttendanceDate'] as Timestamp).toDate()
+              : null,
         );
       }
     } catch (e) {
@@ -359,6 +362,7 @@ class AppFirebaseService {
 
           // 백그라운드에서 Firestore 최신 데이터 및 FCM 토큰 동기화 (네트워크 가능 시)
           unawaited(_syncProfileFromFirestore(restored.id));
+          unawaited(checkAndAwardDailyAttendance());
           unawaited(NotificationService.instance.syncTokenForUser(restored.id));
           return restored;
         } catch (e) {
@@ -378,6 +382,7 @@ class AppFirebaseService {
       if (loadedProfile != null) {
         gCurrentUser = loadedProfile;
         await saveUserProfile(loadedProfile);
+        unawaited(checkAndAwardDailyAttendance());
         unawaited(NotificationService.instance.syncTokenForUser(loadedProfile.id));
         return loadedProfile;
       } else {
@@ -404,15 +409,80 @@ class AppFirebaseService {
           gCurrentUser!.snowPoints = data['snowPoints'] ?? gCurrentUser!.snowPoints;
           gCurrentUser!.completedRidesCount = data['completedRidesCount'] ?? gCurrentUser!.completedRidesCount;
           gCurrentUser!.taggedReviewsCount = data['taggedReviewsCount'] ?? gCurrentUser!.taggedReviewsCount;
+          gCurrentUser!.lastSnowPointDate = (data['lastSnowPointDate'] is Timestamp)
+              ? (data['lastSnowPointDate'] as Timestamp).toDate()
+              : gCurrentUser!.lastSnowPointDate;
+          gCurrentUser!.lastAttendanceDate = (data['lastAttendanceDate'] is Timestamp)
+              ? (data['lastAttendanceDate'] as Timestamp).toDate()
+              : gCurrentUser!.lastAttendanceDate;
           gCurrentUser!.blockedUsers = (List<String>.from(data['blockedUsers'] ?? gCurrentUser!.blockedUsers))
               .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
               .toList();
           // 로컬 캐시도 갱신
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('saved_user_profile_json', jsonEncode(gCurrentUser!.toJson()));
+          notifyCurrentUserChanged();
         }
       }
     } catch (_) {}
+  }
+
+  /// 🔄 사용자 프로필 강제 최신화 (Firestore -> 로컬 캐시 & UI 즉시 갱신)
+  Future<UserProfile?> refreshUserProfile(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (gCurrentUser != null && gCurrentUser!.id == uid) {
+          gCurrentUser!.nickname = data['nickname'] ?? gCurrentUser!.nickname;
+          gCurrentUser!.homeResort = data['homeResort'] ?? gCurrentUser!.homeResort;
+          gCurrentUser!.preferredDiscipline = data['preferredDiscipline'] ?? gCurrentUser!.preferredDiscipline;
+          gCurrentUser!.level = data['level'] ?? gCurrentUser!.level;
+          gCurrentUser!.snowPoints = data['snowPoints'] ?? gCurrentUser!.snowPoints;
+          gCurrentUser!.completedRidesCount = data['completedRidesCount'] ?? gCurrentUser!.completedRidesCount;
+          gCurrentUser!.taggedReviewsCount = data['taggedReviewsCount'] ?? gCurrentUser!.taggedReviewsCount;
+          gCurrentUser!.lastSnowPointDate = (data['lastSnowPointDate'] is Timestamp)
+              ? (data['lastSnowPointDate'] as Timestamp).toDate()
+              : gCurrentUser!.lastSnowPointDate;
+          gCurrentUser!.lastAttendanceDate = (data['lastAttendanceDate'] is Timestamp)
+              ? (data['lastAttendanceDate'] as Timestamp).toDate()
+              : gCurrentUser!.lastAttendanceDate;
+          gCurrentUser!.blockedUsers = (List<String>.from(data['blockedUsers'] ?? gCurrentUser!.blockedUsers))
+              .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
+              .toList();
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('saved_user_profile_json', jsonEncode(gCurrentUser!.toJson()));
+          notifyCurrentUserChanged();
+          debugPrint('🔄 사용자 프로필 실시간 갱신 완료: ${gCurrentUser!.nickname} (${gCurrentUser!.snowPoints}P)');
+          return gCurrentUser;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error refreshing user profile: $e');
+    }
+    return gCurrentUser;
+  }
+
+  /// 📅 매일 첫 앱 접속 출석체크 (+10P 자동 적립)
+  Future<bool> checkAndAwardDailyAttendance() async {
+    final user = gCurrentUser;
+    if (user == null || user.id.isEmpty) return false;
+
+    final now = DateTime.now();
+    if (user.lastAttendanceDate != null) {
+      final last = user.lastAttendanceDate!;
+      if (last.year == now.year && last.month == now.month && last.day == now.day) {
+        return false; // 이미 오늘 출석체크 완료
+      }
+    }
+
+    user.snowPoints += 10;
+    user.lastAttendanceDate = now;
+    await saveUserProfile(user);
+    notifyCurrentUserChanged();
+    debugPrint('🎉 [출석체크] +10P 적립 성공! 총 보유: ${user.snowPoints}P');
+    return true;
   }
 
   Future<void> saveUserProfile(UserProfile profile) async {
@@ -440,6 +510,7 @@ class AppFirebaseService {
         'eventNotification': profile.eventNotification,
         'eventConsentDate': profile.eventConsentDate != null ? Timestamp.fromDate(profile.eventConsentDate!) : null,
         'lastSnowPointDate': profile.lastSnowPointDate != null ? Timestamp.fromDate(profile.lastSnowPointDate!) : null,
+        'lastAttendanceDate': profile.lastAttendanceDate != null ? Timestamp.fromDate(profile.lastAttendanceDate!) : null,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -450,6 +521,7 @@ class AppFirebaseService {
       }
 
       await _firestore.collection('users').doc(uid).set(data, SetOptions(merge: true));
+      notifyCurrentUserChanged();
     } catch (e) {
       debugPrint('Firebase saveUserProfile error: $e');
     }
