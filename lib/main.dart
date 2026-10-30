@@ -27,8 +27,9 @@ void main() async {
     nativeAppKey: 'c6a747117409de895acefc4b77fa969c',
   );
 
-  // 🛡️ Apple Guideline 1.2: 로컬 숨김/차단 캐시 복원
+  // 🛡️ Apple Guideline 1.2 & 매칭 페널티 로컬 캐시 즉시 복원 (앱 재실행 악용 원천 차단)
   unawaited(loadHiddenContentIds());
+  await loadMatchPenaltyState();
 
   // 🚀 앱 UI를 먼저 즉시 띄워 아이폰 실기기 스플래시 화면 멈춤 현상 원천 차단
   runApp(const MyApp());
@@ -784,7 +785,106 @@ void notifyCurrentUserChanged() {
 int gDailyRandomMatchLimit = 1;
 int gDailyRandomMatchRemaining = 1;
 DateTime? gPostBanUntil; // 🚨 랜덤 매칭 중도 퇴장 탈주 시 2시간 작성/참여 페널티 만료 시간
+DateTime? gPartySkipCooldownUntil; // ⏱️ 파티 수락 창에서 '다음에 하기' 거절(또는 강제종료 이탈) 시 5분간 매칭 제한 만료 시간
 bool gBypassWritingHoursForQA = false; // 🛠️ QA 샌드박스용 시간제한 우회
+
+Duration getRemainingSkipCooldown() {
+  if (gPartySkipCooldownUntil == null) return Duration.zero;
+  final diff = gPartySkipCooldownUntil!.difference(DateTime.now());
+  return diff.isNegative ? Duration.zero : diff;
+}
+
+Future<void> loadMatchPenaltyState() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    int maxUntilMs = prefs.getInt('party_skip_cooldown_until_ms') ?? 0;
+
+    final uid = gCurrentUser?.id;
+    if (uid != null && uid.isNotEmpty) {
+      final userUntilMs = prefs.getInt('party_skip_cooldown_until_$uid') ?? 0;
+      if (userUntilMs > maxUntilMs) maxUntilMs = userUntilMs;
+    }
+
+    // 🛡️ 악용 방지: 매칭 수락 모달이 뜬 상태에서 버튼 대신 앱을 강제 종료한 경우에도 동일하게 5분 페널티 유지 및 방 퇴장 처리
+    final pendingPostId = prefs.getString('pending_unaccepted_party_post_id');
+    final pendingUserId = prefs.getString('pending_unaccepted_party_user_id');
+    final pendingShownMs = prefs.getInt('pending_unaccepted_party_shown_ms') ?? 0;
+    if (pendingPostId != null && pendingPostId.isNotEmpty && pendingShownMs > 0) {
+      final enforcedUntilMs = pendingShownMs + const Duration(minutes: 5).inMilliseconds;
+      if (enforcedUntilMs > maxUntilMs) {
+        maxUntilMs = enforcedUntilMs;
+        await prefs.setInt('party_skip_cooldown_until_ms', enforcedUntilMs);
+        if (pendingUserId != null && pendingUserId.isNotEmpty) {
+          await prefs.setInt('party_skip_cooldown_until_$pendingUserId', enforcedUntilMs);
+          unawaited(
+            AppFirebaseService.instance.savePartySkipCooldown(
+              pendingUserId,
+              DateTime.fromMillisecondsSinceEpoch(enforcedUntilMs),
+            ),
+          );
+        }
+      }
+      if (pendingUserId != null && pendingUserId.isNotEmpty) {
+        unawaited(AppFirebaseService.instance.leaveRidePost(pendingPostId, pendingUserId));
+      }
+      await prefs.remove('pending_unaccepted_party_post_id');
+      await prefs.remove('pending_unaccepted_party_user_id');
+      await prefs.remove('pending_unaccepted_party_shown_ms');
+    }
+
+    if (maxUntilMs > DateTime.now().millisecondsSinceEpoch) {
+      gPartySkipCooldownUntil = DateTime.fromMillisecondsSinceEpoch(maxUntilMs);
+    } else {
+      gPartySkipCooldownUntil = null;
+    }
+  } catch (e) {
+    debugPrint('Error loading match penalty state: $e');
+  }
+}
+
+Future<void> markPendingPartyAcceptance(String postId, String userId) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_unaccepted_party_post_id', postId);
+    await prefs.setString('pending_unaccepted_party_user_id', userId);
+    await prefs.setInt('pending_unaccepted_party_shown_ms', DateTime.now().millisecondsSinceEpoch);
+  } catch (_) {}
+}
+
+Future<void> clearPendingPartyAcceptance() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_unaccepted_party_post_id');
+    await prefs.remove('pending_unaccepted_party_user_id');
+    await prefs.remove('pending_unaccepted_party_shown_ms');
+  } catch (_) {}
+}
+
+Future<void> applyPartySkipCooldown({
+  String? postIdToLeave,
+  String? userId,
+  Duration duration = const Duration(minutes: 5),
+}) async {
+  final until = DateTime.now().add(duration);
+  gPartySkipCooldownUntil = until;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_unaccepted_party_post_id');
+    await prefs.remove('pending_unaccepted_party_user_id');
+    await prefs.remove('pending_unaccepted_party_shown_ms');
+    await prefs.setInt('party_skip_cooldown_until_ms', until.millisecondsSinceEpoch);
+    final targetUid = userId ?? gCurrentUser?.id;
+    if (targetUid != null && targetUid.isNotEmpty) {
+      await prefs.setInt('party_skip_cooldown_until_$targetUid', until.millisecondsSinceEpoch);
+      unawaited(AppFirebaseService.instance.savePartySkipCooldown(targetUid, until));
+      if (postIdToLeave != null && postIdToLeave.isNotEmpty) {
+        unawaited(AppFirebaseService.instance.leaveRidePost(postIdToLeave, targetUid));
+      }
+    }
+  } catch (e) {
+    debugPrint('Error applying skip cooldown: $e');
+  }
+}
 
 // ⏰ 모집글 작성 가능 시간 (07:00 ~ 익일 02:00) 체크
 bool isWritingHoursAllowed() {
@@ -953,7 +1053,7 @@ Future<void> tryOpenWriteRidePostScreen(
           ],
         ),
         content: Text(
-          '최근 4인 랜덤 매칭 대화방에서 퇴장하여 $minutes분 동안 새 모집글 작성이 제한됩니다.',
+          '최근 4인 슬로프 파티 대화방에서 퇴장하여 $minutes분 동안 새 모집글 작성이 제한됩니다.',
           style: const TextStyle(fontSize: 13.5, height: 1.4),
         ),
         actions: [
@@ -2734,7 +2834,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Icon(Icons.bolt_rounded, color: Colors.amber, size: 16),
                 SizedBox(width: 4),
                 Text(
-                  '실시간 4인 랜덤 매칭',
+                  '실시간 4인 슬로프 파티',
                   style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -2742,7 +2842,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 14),
           const Text(
-            '지금 슬로프라면?\n조건 없이 4인 번개 매칭!',
+            '지금 슬로프라면?\n같은 스키장 4인 파티 매칭!',
             style: TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.bold,
@@ -2753,7 +2853,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '복잡한 조건 없이 스키장 하나만 선택하면 4명이 모이는 즉시 대화방이 열립니다.',
+            '스키장을 선택하면 라이딩 성향이 맞는 메이트들의 프로필을 확인하고 동행 파티에 합류할 수 있습니다.',
             style: TextStyle(fontSize: 13, color: Colors.blue.shade100, height: 1.4),
           ),
           const SizedBox(height: 18),
@@ -2764,8 +2864,8 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 48,
             child: ElevatedButton(
               onPressed: () {
-                if (!ensureUserLoggedIn(context, actionName: '4인 랜덤 매칭')) return;
-                widget.onNavigateToTab(1, subTabIndex: 1); // 같이 타요 > 랜덤 매칭 탭으로 이동
+                if (!ensureUserLoggedIn(context, actionName: '4인 슬로프 파티')) return;
+                widget.onNavigateToTab(1, subTabIndex: 1); // 같이 타요 > 파티 매칭 탭으로 이동
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -2776,10 +2876,10 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.shuffle_rounded, size: 20, color: Color(0xFF2563EB)),
+                  Icon(Icons.groups_rounded, size: 20, color: Color(0xFF2563EB)),
                   SizedBox(width: 8),
                   Text(
-                    '4인 랜덤 매칭 시작하기 →',
+                    '4인 슬로프 파티 찾기 →',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
                   ),
                 ],
@@ -3268,9 +3368,9 @@ class _RideTogetherHubScreenState extends State<RideTogetherHubScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.bolt_rounded, size: 16),
+                      Icon(Icons.groups_rounded, size: 16),
                       SizedBox(width: 5),
-                      Text('랜덤 매칭'),
+                      Text('4인 파티 매칭'),
                     ],
                   ),
                 ),
@@ -4385,6 +4485,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   int _matchedCount = 1;
   int _elapsedSeconds = 0;
   Timer? _tickerTimer;
+  Timer? _cooldownUiTimer;
   StreamSubscription<List<Map<String, dynamic>>>? _queueSubscription;
   StreamSubscription<Map<String, dynamic>?>? _statusSubscription;
 
@@ -4408,11 +4509,36 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
     _pulseAnimation = Tween<double>(begin: 0.95, end: 1.08).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    loadMatchPenaltyState().then((_) {
+      if (mounted) {
+        _syncCooldownTimer();
+        setState(() {});
+      }
+    });
+    _syncCooldownTimer();
+  }
+
+  void _syncCooldownTimer() {
+    _cooldownUiTimer?.cancel();
+    if (getRemainingSkipCooldown() > Duration.zero) {
+      _cooldownUiTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {});
+        if (getRemainingSkipCooldown() == Duration.zero) {
+          timer.cancel();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _tickerTimer?.cancel();
+    _cooldownUiTimer?.cancel();
     _queueSubscription?.cancel();
     _statusSubscription?.cancel();
     if (_isMatching && gCurrentUser != null) {
@@ -4420,6 +4546,69 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
     }
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _showSkipCooldownDialog(Duration remaining) {
+    final totalSec = remaining.inSeconds.clamp(1, 300);
+    final min = totalSec ~/ 60;
+    final sec = totalSec % 60;
+    final timeStr = min > 0 ? '$min분 $sec초' : '$sec초';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Row(
+          children: [
+            Icon(Icons.hourglass_bottom_rounded, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Text('매칭 일시 제한 (5분 페널티)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.timer_outlined, color: Colors.orange.shade800, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '남은 제한 시간: $timeStr',
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              '직전 매칭에서 [다음에 하기]를 선택하셨거나 수락 없이 이탈하여, 반복 매칭 악용 방지를 위해 5분간 재매칭이 제한됩니다.\n\n앱을 종료 후 다시 실행해도 남은 제한 시간은 동일하게 유지됩니다.',
+              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.45),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDailyLimitExceededDialog() {
@@ -4452,7 +4641,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '오늘의 랜덤 매칭 기회(1회)를 모두 사용하셨습니다.',
+                        '오늘의 4인 파티 매칭 기회(1회)를 모두 사용하셨습니다.',
                         style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.red),
                       ),
                     ),
@@ -4461,7 +4650,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
               ),
               const SizedBox(height: 14),
               const Text(
-                '무분별한 매칭 돌리기 방지와 진정성 있는 슬로프 만남을 위해 4인 랜덤 매칭은 1일 1회로 제한됩니다.\n\n매일 자정(00:00)에 다시 충전됩니다.',
+                '무분별한 매칭 방지와 진정성 있는 슬로프 만남을 위해 4인 슬로프 파티 매칭은 1일 1회로 제한됩니다.\n\n매일 자정(00:00)에 다시 충전됩니다.',
                 style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.45),
               ),
               const SizedBox(height: 14),
@@ -4519,7 +4708,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
           ],
         ),
         content: const Text(
-          '새벽 03:00 ~ 06:00은 슬로프 정설 및 심야 휴장 시간입니다.\n\n안전한 라이딩을 위해 이 시간대에는 랜덤 매칭이 제한됩니다. 오전 슬로프 오픈 시 다시 이용해 주세요 ⛷️',
+          '새벽 03:00 ~ 06:00은 슬로프 정설 및 심야 휴장 시간입니다.\n\n안전한 라이딩을 위해 이 시간대에는 슬로프 파티 매칭이 제한됩니다. 오전 슬로프 오픈 시 다시 이용해 주세요 ⛷️',
           style: TextStyle(fontSize: 13.5, color: Colors.black87, height: 1.45),
         ),
         actions: [
@@ -4576,12 +4765,20 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   }
 
   void _startMatching() {
-    if (!ensureUserLoggedIn(context, actionName: '4인 랜덤 매칭')) return;
+    if (!ensureUserLoggedIn(context, actionName: '4인 슬로프 파티')) return;
 
     // 0. 🌙 새벽 03:00 ~ 06:00 슬로프 정설/휴장 시간 체크
     final now = DateTime.now();
     if (now.hour >= 3 && now.hour < 6) {
       _showMidnightClosedDialog();
+      return;
+    }
+
+    // 0-1. ⏱️ '다음에 하기' 거절 페널티 (5분 매칭 제한) 검사
+    final remainingCooldown = getRemainingSkipCooldown();
+    if (remainingCooldown > Duration.zero) {
+      _syncCooldownTimer();
+      _showSkipCooldownDialog(remainingCooldown);
       return;
     }
 
@@ -4642,12 +4839,15 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
         return;
       }
       setState(() {
-        _matchedCount = riders.length.clamp(1, 4);
         _currentQueue.clear();
         for (final r in riders) {
           final nick = r['nickname'] as String? ?? '익명 라이더';
           _currentQueue.add(nick);
         }
+        if (!_currentQueue.contains(currentUser.nickname)) {
+          _currentQueue.insert(0, currentUser.nickname);
+        }
+        _matchedCount = _currentQueue.length.clamp(1, 4);
       });
     });
 
@@ -4659,28 +4859,278 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
         final matchedPostId = data['matchedPostId'] as String;
         _cancelMatching(leaveQueue: false);
 
-        // 1일 1회 차감
-        setState(() {
-          gDailyRandomMatchRemaining = 0;
-        });
-
-        // 잠시 후 채팅방으로 이동
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (!mounted) return;
-
         // Firestore 실제 매칭 글 조회 (로컬에 없으면 서버에서 직접 조회)
         RidePost? post = gRidePosts.where((p) => p.id == matchedPostId).firstOrNull;
         post ??= await AppFirebaseService.instance.getRidePostById(matchedPostId);
         if (!mounted || post == null) return;
         final validPost = post;
 
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ChatRoomScreen(post: validPost),
-          ),
-        );
+        // 🌟 Apple Guideline 1.2 안전 규정: 대화방 입장 전 상대방 프로필 확인 및 [수락(Accept)] / [거절(Decline)] 선택 모달
+        await _showPreChatAcceptanceDialog(validPost);
       }
     });
+  }
+
+  // -------------------------------------------------------------
+  // 🌟 Apple Guideline 1.2 필수: 대화방 입장 전 프로필 사전 확인 및 수락/거절 모달
+  // -------------------------------------------------------------
+  Future<void> _showPreChatAcceptanceDialog(RidePost post) async {
+    final currentUser = gCurrentUser;
+    if (currentUser == null || !mounted) return;
+
+    // 🛡️ 모달이 열린 상태에서 앱을 강제 종료(스와이프 킬)해 페널티를 우회하는 악용 차단
+    await markPendingPartyAcceptance(post.id, currentUser.id);
+
+    // 참가자 프로필 비동기 로딩 (서버 + 로컬)
+    final participantsList = <UserProfile>[];
+    for (int i = 0; i < post.participantUids.length; i++) {
+      final uid = post.participantUids[i];
+      if (uid == currentUser.id) {
+        participantsList.add(currentUser);
+      } else {
+        UserProfile? prof = await AppFirebaseService.instance.fetchUserProfile(uid);
+        prof ??= UserProfile(
+          id: uid,
+          email: '',
+          joinedAt: DateTime.now(),
+          nickname: i < post.participantNames.length ? post.participantNames[i] : '라이더 $i',
+          homeResort: post.resortName,
+          level: '중급',
+          preferredDiscipline: '보드 🏂',
+          provider: uid.startsWith('apple') ? SocialAuthProvider.apple : SocialAuthProvider.kakao,
+        );
+        participantsList.add(prof);
+      }
+    }
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.groups_rounded, color: Color(0xFF2563EB), size: 24),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '4인 슬로프 파티 매칭 완료!',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, letterSpacing: -0.3),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '대화방 입장 전 함께할 라이더를 확인하세요',
+                      style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 상단 스키장 파티 안내 배너
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade100),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.downhill_skiing_rounded, color: Colors.blue.shade700, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '[${post.resortName}] 동일 스키장 실시간 동행 파티',
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                const Text(
+                  '함께할 라이더 프로필',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+                const SizedBox(height: 8),
+
+                // 4인 라이더 프로필 카드 리스트 (소셜 인증 배지 제거)
+                ...participantsList.map((rider) {
+                  final isMe = rider.id == currentUser.id;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isMe ? const Color(0xFF2563EB).withValues(alpha: 0.05) : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isMe ? const Color(0xFF2563EB).withValues(alpha: 0.3) : Colors.grey.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: isMe ? const Color(0xFF2563EB) : Colors.indigo.shade400,
+                          child: Text(
+                            rider.nickname.isNotEmpty ? rider.nickname.characters.first : '?',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      rider.nickname,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: isMe ? const Color(0xFF2563EB) : Colors.black87,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (isMe) ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF2563EB),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text('나', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${rider.homeResort} • ${rider.preferredDiscipline} • ${rider.level}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.shield_outlined, color: Colors.amber.shade900, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '프로필 확인 후 [파티 참여하기]를 눌러야 대화방에 연결됩니다.\n[다음에 하기] 선택 시 악용 방지를 위해 5분간 재매칭이 제한됩니다.',
+                          style: TextStyle(fontSize: 11, color: Colors.amber.shade900, height: 1.35),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await applyPartySkipCooldown(
+                        postIdToLeave: post.id,
+                        userId: currentUser.id,
+                      );
+                      if (!mounted) return;
+                      _syncCooldownTimer();
+                      setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: Colors.orange.shade900,
+                          content: const Text('⏱️ 파티 참여를 건너뛰어 5분간 매칭이 제한됩니다. (앱 재실행 시에도 유지)'),
+                        ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade700,
+                      side: BorderSide(color: Colors.grey.shade300),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('다음에 하기\n(5분 매칭 제한)', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, height: 1.2)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await clearPendingPartyAcceptance();
+                      if (!mounted) return;
+                      setState(() {
+                        gDailyRandomMatchRemaining = 0;
+                      });
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ChatRoomScreen(post: post),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('파티 참여하기\n(수락)', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, height: 1.2)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _handleMatchTimeout() {
@@ -4774,6 +5224,11 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
   // -------------------------------------------------------------
   Widget _buildResortSelectionView() {
     final bool hasTicket = gDailyRandomMatchRemaining > 0;
+    final Duration cooldownRemaining = getRemainingSkipCooldown();
+    final bool isInCooldown = cooldownRemaining > Duration.zero;
+    final int cdSecTotal = cooldownRemaining.inSeconds.clamp(0, 300);
+    final String cdMm = (cdSecTotal ~/ 60).toString().padLeft(2, '0');
+    final String cdSs = (cdSecTotal % 60).toString().padLeft(2, '0');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -4813,7 +5268,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                         children: [
                           Icon(Icons.bolt_rounded, color: Colors.amber, size: 16),
                           SizedBox(width: 4),
-                          Text('초고속 4인 매칭', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          Text('초고속 4인 파티', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -4821,11 +5276,15 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: hasTicket ? Colors.green.shade600 : Colors.red.shade600,
+                        color: isInCooldown
+                            ? Colors.orange.shade700
+                            : (hasTicket ? Colors.green.shade600 : Colors.red.shade600),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        hasTicket ? '1일 1회 가능 🟢' : '오늘 기회 소진 🔴',
+                        isInCooldown
+                            ? '페널티 $cdMm:$cdSs ⏱️'
+                            : (hasTicket ? '1일 1회 가능 🟢' : '오늘 기회 소진 🔴'),
                         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -4833,7 +5292,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  '조건 없이 딱 스키장만 정하고\n4명이 모이면 즉시 채팅 시작!',
+                  '같은 스키장 라이더들과\n프로필 확인 후 안전한 동행 파티!',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -4843,7 +5302,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '무분별한 매칭 방지와 안전한 슬로프 만남을 위해 1일 1회만 제공됩니다.',
+                  '상대방 프로필을 확인하고 직접 수락해야 대화방이 열리는 안전한 동행 시스템입니다.',
                   style: TextStyle(fontSize: 12.5, color: Colors.white70, height: 1.3),
                 ),
               ],
@@ -4905,10 +5364,14 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            hasTicket ? '⚡️ 오늘 남은 매칭 기회: 1회' : '🔒 오늘 매칭 기회를 모두 사용했습니다',
+                            isInCooldown
+                                ? '⏱️ 매칭 제한 페널티 적용 중 ($cdMm:$cdSs 남음)'
+                                : (hasTicket ? '⚡️ 오늘 남은 매칭 기회: 1회' : '🔒 오늘 매칭 기회를 모두 사용했습니다'),
                             style: TextStyle(
                               fontSize: 12,
-                              color: hasTicket ? Colors.blue.shade700 : Colors.red.shade600,
+                              color: isInCooldown
+                                  ? Colors.orange.shade800
+                                  : (hasTicket ? Colors.blue.shade700 : Colors.red.shade600),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -4924,7 +5387,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                   child: ElevatedButton(
                     onPressed: _startMatching,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: hasTicket ? const Color(0xFF2563EB) : Colors.grey.shade400,
+                      backgroundColor: (hasTicket && !isInCooldown) ? const Color(0xFF2563EB) : Colors.grey.shade400,
                       foregroundColor: Colors.white,
                       elevation: 2,
                       shadowColor: const Color(0xFF2563EB).withValues(alpha: 0.3),
@@ -4933,13 +5396,18 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.shuffle_rounded, size: 20),
+                        Icon(isInCooldown ? Icons.hourglass_bottom_rounded : Icons.groups_rounded, size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          hasTicket
-                              ? '[${_selectedResort.shortName}] 4인 랜덤 매칭 시작 (1/1회)'
-                              : '오늘의 1회 매칭 완료됨 (내일 자정 초기화)',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            isInCooldown
+                                ? '매칭 제한 중 ($cdMm:$cdSs 후 재시도 가능)'
+                                : (hasTicket
+                                    ? '[${_selectedResort.shortName}] 4인 슬로프 파티 찾기 (1/1회)'
+                                    : '오늘의 1회 파티 매칭 완료됨 (내일 자정 초기화)'),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -5134,8 +5602,8 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
           const SizedBox(height: 6),
           Text(
             _matchedCount == 4
-                ? '🎉 4명 매칭 완료! 단체 채팅방을 개설합니다...'
-                : '실시간 접속 중인 ${_selectedResort.shortName} 라이더를 찾는 중...',
+                ? '🎉 4인 파티 매칭 완료! 프로필 확인 창이 열립니다...'
+                : '실시간 접속 중인 ${_selectedResort.shortName} 슬로프 메이트를 찾는 중...',
             style: TextStyle(
               fontSize: 14,
               color: _matchedCount == 4 ? Colors.green.shade700 : Colors.grey.shade600,
@@ -5147,8 +5615,8 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
           // 4인 슬롯 카드 그리드 (군더더기 없는 깔끔한 카드)
           Column(
             children: List.generate(4, (index) {
-              final isFilled = index < _matchedCount;
-              final name = isFilled ? _currentQueue[index] : null;
+              final name = index < _currentQueue.length ? _currentQueue[index] : null;
+              final isFilled = name != null;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -5184,7 +5652,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                     const SizedBox(width: 14),
                     Expanded(
                       child: Text(
-                        isFilled ? name! : '대기열 탐색 중...',
+                        isFilled ? name : '대기열 탐색 중...',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -5860,7 +6328,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
 
 
   final List<String> _presetTags = [
-    '#4인랜덤매칭후기',
+    '#4인파티매칭후기',
     '#설질대박',
     '#야간라이딩',
     '#초보환영',
@@ -8210,7 +8678,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Text('❄️ 포인트 적립 방법', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87)),
                 const SizedBox(height: 10),
                 _buildPointEarnRow(emoji: '📅', title: '매일 첫 앱 접속 (출석체크)', points: '+10P', desc: '하루 1회 앱 접속 시 자동 적립'),
-                _buildPointEarnRow(emoji: '⚡️', title: '4인 랜덤 매칭 성공 & 동행', points: '+50P', desc: '초고속 4인 매칭 완료 시 적립'),
+                _buildPointEarnRow(emoji: '⚡️', title: '4인 슬로프 파티 성공 & 동행', points: '+50P', desc: '초고속 4인 파티 매칭 완료 시 적립'),
                 _buildPointEarnRow(emoji: '🏂', title: '같이타요 모집글 동행 성사', points: '+50P', desc: '모집글 작성 또는 참가 완료 시'),
                 _buildPointEarnRow(emoji: '👤', title: '홈 스키장/프로필 설정', points: '+100P', desc: '최초 가입 및 라이딩 성향 등록 (1회)'),
                 const SizedBox(height: 18),
@@ -9675,7 +10143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           SwitchListTile(
             secondary: const Icon(Icons.bolt_rounded, color: Colors.amber),
-            title: const Text('4인 랜덤 매칭 성공 알림', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+            title: const Text('4인 슬로프 파티 성공 알림', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
             subtitle: const Text('매칭 성사 시 푸시 알림 수신', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
             value: _matchNotification,
             activeThumbColor: const Color(0xFF2563EB),
@@ -10052,7 +10520,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                '국내 12개 스키장 4인 실시간 랜덤 매칭\n& 슬로프 메이트 커뮤니티',
+                '국내 12개 스키장 4인 실시간 슬로프 파티\n& 슬로프 메이트 커뮤니티',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -10396,7 +10864,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red.shade800,
-          content: Text('🚨 랜덤 매칭 중도 퇴장 페널티로 인해 앞으로 ${remainingMin + 1}분 동안 참가 신청이 제한됩니다.'),
+          content: Text('🚨 슬로프 파티 중도 퇴장 페널티로 인해 앞으로 ${remainingMin + 1}분 동안 참가 신청이 제한됩니다.'),
         ),
       );
       return;
@@ -11321,7 +11789,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _confirmLeaveChatRoom() {
-    final isRandomMatch = widget.post.purpose.contains('랜덤');
+    final isRandomMatch = widget.post.purpose.contains('랜덤') || widget.post.purpose.contains('파티 매칭');
 
     if (isRandomMatch) {
       showDialog(
@@ -11332,7 +11800,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
               SizedBox(width: 8),
-              Text('랜덤 매칭 대화방 퇴장 경고', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              Text('슬로프 파티 대화방 퇴장 경고', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ],
           ),
           content: Column(
@@ -11354,7 +11822,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.red),
                     ),
                     SizedBox(height: 8),
-                    Text('1. ⚡ 오늘의 4인 랜덤 매칭 기회 즉시 소멸 (금일 재매칭 불가)', style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.35)),
+                    Text('1. ⚡ 오늘의 4인 파티 매칭 기회 즉시 소멸 (금일 재매칭 불가)', style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.35)),
                     SizedBox(height: 4),
                     Text('2. ⏱️ 향후 2시간 동안 모든 메이트 모집글 작성 및 참여 제한', style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.35)),
                   ],
@@ -11504,7 +11972,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isRandomMatch = widget.post.purpose.contains('랜덤');
+    final bool isRandomMatch = widget.post.purpose.contains('랜덤') || widget.post.purpose.contains('파티 매칭');
     final bool needsRefill = isRandomMatch && widget.post.currentMembers < 4;
 
     return Scaffold(
@@ -11655,7 +12123,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                             ),
                             Text(
                               widget.post.needsRefill
-                                  ? '다른 라이더가 랜덤 매칭 시작 시 이 방으로 즉시 자동 합류합니다.'
+                                  ? '다른 라이더가 파티 매칭 시작 시 이 방으로 즉시 합류합니다.'
                                   : '3명이서 타거나, 실시간으로 1명을 충원할 수 있습니다.',
                               style: const TextStyle(fontSize: 11, color: Color(0xFF92400E)),
                             ),
@@ -12042,7 +12510,7 @@ class _WriteRidePostScreenState extends State<WriteRidePostScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red.shade800,
-          content: Text('🚨 랜덤 매칭 중도 퇴장 페널티로 인해 앞으로 ${remainingMin + 1}분 동안 모집글 작성이 제한됩니다.'),
+          content: Text('🚨 슬로프 파티 중도 퇴장 페널티로 인해 앞으로 ${remainingMin + 1}분 동안 모집글 작성이 제한됩니다.'),
         ),
       );
       return;

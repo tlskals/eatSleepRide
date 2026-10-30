@@ -345,6 +345,34 @@ class AppFirebaseService {
     return null;
   }
 
+  Future<void> _syncSkipCooldownFromUserDoc(Map<String, dynamic> data, String uid) async {
+    try {
+      if (data['partySkipCooldownUntil'] is Timestamp) {
+        final serverUntil = (data['partySkipCooldownUntil'] as Timestamp).toDate();
+        if (serverUntil.isAfter(DateTime.now())) {
+          if (gPartySkipCooldownUntil == null || serverUntil.isAfter(gPartySkipCooldownUntil!)) {
+            gPartySkipCooldownUntil = serverUntil;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setInt('party_skip_cooldown_until_ms', serverUntil.millisecondsSinceEpoch);
+            await prefs.setInt('party_skip_cooldown_until_$uid', serverUntil.millisecondsSinceEpoch);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> savePartySkipCooldown(String uid, DateTime until) async {
+    if (uid.isEmpty) return;
+    try {
+      await _firestore.collection('users').doc(uid).set(
+        {'partySkipCooldownUntil': Timestamp.fromDate(until)},
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      debugPrint('savePartySkipCooldown error: $e');
+    }
+  }
+
   // -------------------------------------------------------------
   // 1. 유저 프로필 로컬 및 클라우드 동기화 (자동 로그인 세션 유지)
   // -------------------------------------------------------------
@@ -382,6 +410,7 @@ class AppFirebaseService {
       if (loadedProfile != null) {
         gCurrentUser = loadedProfile;
         await saveUserProfile(loadedProfile);
+        unawaited(_syncProfileFromFirestore(loadedProfile.id));
         unawaited(checkAndAwardDailyAttendance());
         unawaited(NotificationService.instance.syncTokenForUser(loadedProfile.id));
         return loadedProfile;
@@ -419,6 +448,7 @@ class AppFirebaseService {
               .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
               .toList();
           // 로컬 캐시도 갱신
+          await _syncSkipCooldownFromUserDoc(data, uid);
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('saved_user_profile_json', jsonEncode(gCurrentUser!.toJson()));
           notifyCurrentUserChanged();
@@ -451,6 +481,7 @@ class AppFirebaseService {
               .where((b) => b.trim().isNotEmpty && !b.startsWith('익명의') && !b.startsWith('익명'))
               .toList();
 
+          await _syncSkipCooldownFromUserDoc(data, uid);
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('saved_user_profile_json', jsonEncode(gCurrentUser!.toJson()));
           notifyCurrentUserChanged();
@@ -898,6 +929,36 @@ class AppFirebaseService {
     }
   }
 
+  Future<void> leaveRidePost(String postId, String userId) async {
+    try {
+      final docRef = _firestore.collection('gatherings').doc(postId);
+      final doc = await docRef.get();
+      if (!doc.exists) return;
+      final data = doc.data()!;
+      List<String> participants = List<String>.from(data['participantNames'] ?? []);
+      List<String> participantUids = List<String>.from(data['participantUids'] ?? []);
+      final uidIdx = participantUids.indexOf(userId);
+      if (uidIdx != -1) {
+        participantUids.removeAt(uidIdx);
+        if (uidIdx < participants.length) {
+          participants.removeAt(uidIdx);
+        }
+      }
+      final updateData = <String, dynamic>{
+        'participantNames': participants,
+        'participantUids': participantUids,
+        'currentMembers': participants.length,
+      };
+      if (data['authorUid'] == userId && participantUids.isNotEmpty) {
+        updateData['authorUid'] = participantUids.first;
+        updateData['authorName'] = participants.isNotEmpty ? participants.first : '익명';
+      }
+      await docRef.update(updateData);
+    } catch (e) {
+      debugPrint('leaveRidePost error: $e');
+    }
+  }
+
   // -------------------------------------------------------------
   // ⚡ 4인 실시간 랜덤 매칭 큐 (`random_match_queues/{resortId}/riders`)
   // -------------------------------------------------------------
@@ -1069,14 +1130,14 @@ class AppFirebaseService {
           final postId = 'random_match_${now.millisecondsSinceEpoch}';
           final newPost = RidePost(
             id: postId,
-            title: '[⚡️ 4인 랜덤매칭] $shortName 실시간 번개',
+            title: '[⚡️ 4인 슬로프파티] $shortName 실시간 번개',
             content: '$resortName 실시간 4인 슬로프 메이트 대화방입니다. 슬로프에서 만나요!',
             resortName: resortName,
             slopes: ['전체 슬로프 (자유)'],
             discipline: '스키/보드 혼합',
             style: '자유 라이딩',
             skillLevel: '무관',
-            purpose: '랜덤 매칭',
+            purpose: '슬로프 파티 매칭',
             dateText: '오늘 실시간',
             timeSlot: '실시간 즉시',
             maxMembers: 3,
@@ -1090,7 +1151,7 @@ class AppFirebaseService {
             chatMessages: [
               ChatMessage(
                 sender: '시스템',
-                text: '🎉 [$shortName] 4인 실시간 랜덤 매칭이 성사되었습니다!\n함께할 메이트들과 반갑게 인사하고 슬로프 약속을 정해보세요 ⛷️🏂',
+                text: '🎉 [$shortName] 4인 실시간 슬로프 파티 매칭이 성사되었습니다!\n함께할 메이트들과 반갑게 인사하고 슬로프 약속을 정해보세요 ⛷️🏂',
                 time: now,
                 isSystem: true,
               ),
