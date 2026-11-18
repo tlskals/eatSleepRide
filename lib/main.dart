@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -30,6 +32,7 @@ void main() async {
   // 🛡️ Apple Guideline 1.2 & 매칭 페널티 로컬 캐시 즉시 복원 (앱 재실행 악용 원천 차단)
   unawaited(loadHiddenContentIds());
   await loadMatchPenaltyState();
+  await loadDailyMatchCount();
 
   // 🚀 앱 UI를 먼저 즉시 띄워 아이폰 실기기 스플래시 화면 멈춤 현상 원천 차단
   runApp(const MyApp());
@@ -176,6 +179,97 @@ class ResortWeather {
     );
   }
 
+  factory ResortWeather.fromWttrJson(Map<String, dynamic> json) {
+    final currents = json['current_condition'] as List<dynamic>? ?? [];
+    final current = currents.isNotEmpty ? currents[0] as Map<String, dynamic> : <String, dynamic>{};
+
+    final double temp = double.tryParse(current['temp_C']?.toString() ?? '-2.0') ?? -2.0;
+    final double apparentTemp = double.tryParse(current['FeelsLikeC']?.toString() ?? temp.toString()) ?? temp;
+    final double windKmh = double.tryParse(current['windspeedKmph']?.toString() ?? '7.0') ?? 7.0;
+    final double windSpeed = (windKmh / 3.6);
+    final int humidity = int.tryParse(current['humidity']?.toString() ?? '55') ?? 55;
+
+    final descList = current['weatherDesc'] as List<dynamic>? ?? [];
+    final rawDesc = descList.isNotEmpty ? (descList[0]['value']?.toString() ?? '') : '';
+    final code = int.tryParse(current['weatherCode']?.toString() ?? '113') ?? 113;
+
+    final desc = _parseWttrDesc(rawDesc, code);
+    final emoji = _parseWttrEmoji(rawDesc, code);
+
+    List<DailyWeatherForecast> forecasts = [];
+    final weatherList = json['weather'] as List<dynamic>? ?? [];
+    final now = DateTime.now();
+    final weekDays = ['월', '화', '수', '목', '금', '토', '일'];
+
+    for (int i = 0; i < weatherList.length && i < 5; i++) {
+      final w = weatherList[i] as Map<String, dynamic>;
+      final dateStr = w['date']?.toString() ?? '';
+      final parts = dateStr.split('-');
+      final monthDay = parts.length >= 3 ? '${parts[1]}/${parts[2]}' : dateStr;
+      
+      final dt = now.add(Duration(days: i));
+      String dayLabel = i == 0 ? '오늘' : (i == 1 ? '내일' : weekDays[(dt.weekday - 1) % 7]);
+
+      final maxT = double.tryParse(w['maxtempC']?.toString() ?? '') ?? (temp + 2.0);
+      final minT = double.tryParse(w['mintempC']?.toString() ?? '') ?? (temp - 4.0);
+      final snow = double.tryParse(w['totalSnow_cm']?.toString() ?? '0.0') ?? 0.0;
+
+      final hourly = w['hourly'] as List<dynamic>? ?? [];
+      final midHourly = hourly.length > 4 ? hourly[4] as Map<String, dynamic> : (hourly.isNotEmpty ? hourly[0] as Map<String, dynamic> : null);
+      final hDescList = midHourly?['weatherDesc'] as List<dynamic>? ?? [];
+      final hRawDesc = hDescList.isNotEmpty ? (hDescList[0]['value']?.toString() ?? rawDesc) : rawDesc;
+      final hCode = int.tryParse(midHourly?['weatherCode']?.toString() ?? '') ?? code;
+
+      final fDesc = _parseWttrDesc(hRawDesc, hCode);
+      final fEmoji = snow > 0 ? '❄️' : _parseWttrEmoji(hRawDesc, hCode);
+
+      forecasts.add(
+        DailyWeatherForecast(
+          date: monthDay,
+          dayName: '$dayLabel (${weekDays[(dt.weekday - 1) % 7]})',
+          maxTemp: maxT,
+          minTemp: minT,
+          snowfall: snow,
+          weatherDesc: fDesc,
+          iconEmoji: fEmoji,
+        ),
+      );
+    }
+
+    return ResortWeather(
+      temp: temp,
+      apparentTemp: apparentTemp,
+      windSpeed: double.parse(windSpeed.toStringAsFixed(1)),
+      humidity: humidity,
+      weatherDesc: desc,
+      iconEmoji: emoji,
+      dailyForecasts: forecasts,
+    );
+  }
+
+  static String _parseWttrDesc(String raw, int code) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('snow') || lower.contains('sleet') || lower.contains('blizzard') || lower.contains('ice')) return '눈 ❄️';
+    if (lower.contains('thunder')) return '뇌우';
+    if (lower.contains('rain') || lower.contains('drizzle') || lower.contains('shower')) return '비';
+    if (lower.contains('fog') || lower.contains('mist')) return '안개';
+    if (lower.contains('overcast')) return '흐림';
+    if (lower.contains('cloud')) return '구름많음';
+    if (lower.contains('clear') || lower.contains('sunny')) return '맑음';
+    return '맑음';
+  }
+
+  static String _parseWttrEmoji(String raw, int code) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('snow') || lower.contains('sleet') || lower.contains('blizzard') || lower.contains('ice')) return '❄️';
+    if (lower.contains('thunder')) return '⚡';
+    if (lower.contains('rain') || lower.contains('drizzle') || lower.contains('shower')) return '🌧️';
+    if (lower.contains('fog') || lower.contains('mist')) return '🌫️';
+    if (lower.contains('cloud') || lower.contains('overcast')) return '⛅';
+    if (lower.contains('clear') || lower.contains('sunny')) return '☀️';
+    return '☀️';
+  }
+
   static String _parseWeatherDesc(int code) {
     if (code == 0) return '맑음';
     if (code >= 1 && code <= 3) return '구름많음';
@@ -230,6 +324,7 @@ class DetailedSlope {
   final SlopeDifficulty difficulty;
   final SlopeStatus status;
   final String length;
+  final String slopeDegree;
   final String note;
   final double mapX;
   final double mapY;
@@ -240,6 +335,7 @@ class DetailedSlope {
     required this.difficulty,
     this.status = SlopeStatus.open,
     this.length = '',
+    this.slopeDegree = '',
     this.note = '',
     this.mapX = 0.5,
     this.mapY = 0.5,
@@ -336,6 +432,10 @@ class RidePost {
   // 🛡️ 익명 모드 (기본값 ON: '익명의라이더 A, B, C, D' 순차 부여)
   bool isAnonymous;
 
+  // 🎯 조건 매칭 메타데이터 (유저 피드백 기반 조건 매칭 기능)
+  bool isCustomMatch;
+  List<String> matchFilterAgeGroups;
+
   RidePost({
     required this.id,
     this.authorUid,
@@ -366,10 +466,13 @@ class RidePost {
     this.isBlinded = false,
     List<String>? reportedUserIds,
     this.isAnonymous = true,
+    this.isCustomMatch = false,
+    List<String>? matchFilterAgeGroups,
   })  : createdAt = createdAt ?? DateTime.now(),
         participantNames = participantNames ?? [authorName],
         participantUids = participantUids ?? (authorUid != null ? [authorUid] : []),
-        reportedUserIds = reportedUserIds ?? [];
+        reportedUserIds = reportedUserIds ?? [],
+        matchFilterAgeGroups = matchFilterAgeGroups ?? [];
 
   static const List<String> kAnonymousLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -393,19 +496,58 @@ class RidePost {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
   bool get isFull => currentMembers >= (maxMembers + 1);
+
+  // ❄️ 당일 모집글 여부 판별 (00:00~01:59 심야 세션은 전일 세션 유효 인정 및 당일 외 숨김 처리)
+  bool get isToday {
+    final now = DateTime.now();
+    final effectiveDate = now.hour < 2 ? now.subtract(const Duration(days: 1)) : now;
+    final currentMonth = effectiveDate.month;
+    final currentDay = effectiveDate.day;
+
+    if (dateText.contains('오늘')) {
+      return !isExpired;
+    }
+
+    final match = RegExp(r'(\d+)\s*월\s*(\d+)\s*일').firstMatch(dateText);
+    if (match != null) {
+      final m = int.tryParse(match.group(1) ?? '');
+      final d = int.tryParse(match.group(2) ?? '');
+      if (m != null && d != null) {
+        if (m == currentMonth && d == currentDay) {
+          return !isExpired;
+        }
+        return false;
+      }
+    }
+
+    return !isExpired && now.difference(createdAt).inHours < 24;
+  }
+
+  // 🛡️ 내가 작성한 모집글 여부
+  bool get isMyPost {
+    if (isAuthor) return true;
+    final myUid = gCurrentUser?.id ?? '';
+    final myNick = gCurrentUser?.nickname ?? '';
+    if (myUid.isNotEmpty && authorUid != null && authorUid == myUid) return true;
+    if (myNick.isNotEmpty && authorName.isNotEmpty && authorName == myNick) return true;
+    return false;
+  }
+
   bool get canAccessChat =>
       gCurrentUser != null &&
-      (isAuthor || isJoined || (gCurrentUser?.nickname != null && participantNames.contains(gCurrentUser!.nickname))) &&
+      (isMyPost || isJoined || (gCurrentUser?.nickname != null && participantNames.contains(gCurrentUser!.nickname))) &&
       !isExpired &&
       !isBlinded;
 
   // 🛡️ Apple Guideline 1.2: 로컬 피드 즉시 숨김(Immediate Removal) 및 신고 즉시 숨김
+  // ❄️ 당일글이 아니면 자동 숨김처리 (isToday == false)
   bool get shouldHide =>
       isBlinded ||
       reportCount >= 3 ||
       isExpired ||
-      (gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
-      gHiddenContentIds.contains(id);
+      !isToday ||
+      (!isMyPost && gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
+      (!isMyPost && gHiddenContentIds.contains(id));
 }
 
 // 🛡️ Apple Guideline 1.2: 피드에서 즉시 숨김(Immediate Removal) 처리된 항목 ID 세트 및 영구 로컬 캐시
@@ -476,6 +618,7 @@ class UserProfile {
   String preferredDiscipline;
   String homeResort;
   String level;
+  String ageGroup; // 🎂 연령대 ('20대', '30대', '40대')
   final DateTime joinedAt;
 
   // 🏂 나의 슬로프 활동 지표 & 계정 가꾸기 데이터
@@ -488,6 +631,20 @@ class UserProfile {
   DateTime? eventConsentDate; // 수신 동의/변경 일시
   DateTime? lastSnowPointDate;
   DateTime? lastAttendanceDate; // 📅 매일 첫 접속 출석체크 일시
+
+  // 🚨 신고 및 단계별 제재 (1회: 24h, 2회: 72h, 3회: 144h, 4회: 영구정지)
+  int sanctionCount;
+  DateTime? sanctionUntil;
+  bool isPermanentlyBanned;
+  String? sanctionReason;
+
+  bool get isCurrentlySanctioned {
+    if (isPermanentlyBanned) return true;
+    if (sanctionUntil != null && DateTime.now().isBefore(sanctionUntil!)) {
+      return true;
+    }
+    return false;
+  }
 
   bool get hasEarnedSnowPointToday {
     if (lastSnowPointDate == null) return false;
@@ -574,6 +731,7 @@ class UserProfile {
     this.preferredDiscipline = '스노보드',
     this.homeResort = '비발디파크',
     this.level = '중급',
+    this.ageGroup = '20대',
     required this.joinedAt,
     this.completedRidesCount = 0,
     this.taggedReviewsCount = 0,
@@ -585,6 +743,10 @@ class UserProfile {
     this.eventConsentDate,
     this.lastSnowPointDate,
     this.lastAttendanceDate,
+    this.sanctionCount = 0,
+    this.sanctionUntil,
+    this.isPermanentlyBanned = false,
+    this.sanctionReason,
   })  : riderTitle = riderTitle ?? '비기너 라이더 🏂',
         blockedUsers = blockedUsers ?? [];
 
@@ -701,6 +863,7 @@ class UserProfile {
       'preferredDiscipline': preferredDiscipline,
       'homeResort': homeResort,
       'level': level,
+      'ageGroup': ageGroup,
       'joinedAt': joinedAt.toIso8601String(),
       'completedRidesCount': completedRidesCount,
       'taggedReviewsCount': taggedReviewsCount,
@@ -711,6 +874,10 @@ class UserProfile {
       'eventConsentDate': eventConsentDate?.toIso8601String(),
       'lastSnowPointDate': lastSnowPointDate?.toIso8601String(),
       'lastAttendanceDate': lastAttendanceDate?.toIso8601String(),
+      'sanctionCount': sanctionCount,
+      'sanctionUntil': sanctionUntil?.toIso8601String(),
+      'isPermanentlyBanned': isPermanentlyBanned,
+      'sanctionReason': sanctionReason,
     };
   }
 
@@ -726,6 +893,7 @@ class UserProfile {
       preferredDiscipline: json['preferredDiscipline'] ?? '스노보드',
       homeResort: json['homeResort'] ?? '비발디파크',
       level: json['level'] ?? '중급',
+      ageGroup: json['ageGroup'] ?? '20대',
       joinedAt: json['joinedAt'] != null
           ? DateTime.tryParse(json['joinedAt']) ?? DateTime.now()
           : DateTime.now(),
@@ -754,6 +922,12 @@ class UserProfile {
       lastAttendanceDate: json['lastAttendanceDate'] != null
           ? DateTime.tryParse(json['lastAttendanceDate'])
           : null,
+      sanctionCount: json['sanctionCount'] ?? 0,
+      sanctionUntil: json['sanctionUntil'] != null
+          ? DateTime.tryParse(json['sanctionUntil'])
+          : null,
+      isPermanentlyBanned: json['isPermanentlyBanned'] ?? false,
+      sanctionReason: json['sanctionReason'],
     );
   }
 }
@@ -781,9 +955,39 @@ void notifyCurrentUserChanged() {
   gCurrentUserNotifier.notifyChanged();
 }
 
-// 1일 랜덤 매칭 횟수 제한 (클린한 만남 & 어뷰징 방지)
-int gDailyRandomMatchLimit = 1;
-int gDailyRandomMatchRemaining = 1;
+// 1일 랜덤 매칭 횟수 제한 (클린한 만남 & 어뷰징 방지: 1일 2회)
+int gDailyRandomMatchLimit = 2;
+int gDailyRandomMatchRemaining = 2;
+DateTime? gLastMatchCountDate;
+
+Future<void> loadDailyMatchCount() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
+    final savedDate = prefs.getString('daily_match_count_date') ?? '';
+    if (savedDate == todayStr) {
+      gDailyRandomMatchRemaining = prefs.getInt('daily_match_remaining') ?? 2;
+    } else {
+      gDailyRandomMatchRemaining = 2;
+      await prefs.setString('daily_match_count_date', todayStr);
+      await prefs.setInt('daily_match_remaining', 2);
+    }
+  } catch (e) {
+    debugPrint('Error loading daily match count: $e');
+  }
+}
+
+Future<void> consumeMatchTicket() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
+    gDailyRandomMatchRemaining = (gDailyRandomMatchRemaining - 1).clamp(0, 2);
+    await prefs.setString('daily_match_count_date', todayStr);
+    await prefs.setInt('daily_match_remaining', gDailyRandomMatchRemaining);
+  } catch (e) {
+    debugPrint('Error saving match ticket: $e');
+  }
+}
 DateTime? gPostBanUntil; // 🚨 랜덤 매칭 중도 퇴장 탈주 시 2시간 작성/참여 페널티 만료 시간
 DateTime? gPartySkipCooldownUntil; // ⏱️ 파티 수락 창에서 '다음에 하기' 거절(또는 강제종료 이탈) 시 5분간 매칭 제한 만료 시간
 bool gBypassWritingHoursForQA = false; // 🛠️ QA 샌드박스용 시간제한 우회
@@ -957,8 +1161,9 @@ Future<void> tryOpenWriteRidePostScreen(
   VoidCallback? onPostCreated,
   String? initialResortName,
 }) async {
-  // 0. 로그인 여부 확인
+  // 0. 로그인 여부 및 이용 제재 확인
   if (!ensureUserLoggedIn(context, actionName: '모집글을 작성')) return;
+  if (checkUserSanctionAndAlert(context)) return;
 
   // 1. 새벽 글작성 제한 시간대 검사 (02:00 ~ 07:00)
   if (!isWritingHoursAllowed()) {
@@ -1126,12 +1331,22 @@ class RideReview {
     List<String>? reportedUserIds,
   }) : reportedUserIds = reportedUserIds ?? [];
 
+  // 🛡️ 내가 작성한 후기 여부
+  bool get isMyReview {
+    if (isAuthor) return true;
+    final myUid = gCurrentUser?.id ?? '';
+    final myNick = gCurrentUser?.nickname ?? '';
+    if (myUid.isNotEmpty && authorUid != null && authorUid == myUid) return true;
+    if (myNick.isNotEmpty && authorName.isNotEmpty && authorName == myNick) return true;
+    return false;
+  }
+
   // 🛡️ Apple Guideline 1.2: 로컬 피드 즉시 숨김(Immediate Removal) 및 신고 즉시 숨김
   bool get shouldHide =>
       isBlinded ||
       reportCount >= 3 ||
-      (gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
-      gHiddenContentIds.contains(id);
+      (!isMyReview && gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
+      (!isMyReview && gHiddenContentIds.contains(id));
 }
 
 // -------------------------------------------------------------
@@ -1172,12 +1387,21 @@ class LiveSnowComment {
   })  : likedUserNames = likedUserNames ?? [],
         reportedUserIds = reportedUserIds ?? [];
 
+  // 🛡️ 내가 작성한 한줄평 여부
+  bool get isMyComment {
+    final myUid = gCurrentUser?.id ?? '';
+    final myNick = gCurrentUser?.nickname ?? '';
+    if (myUid.isNotEmpty && authorUid != null && authorUid == myUid) return true;
+    if (myNick.isNotEmpty && authorName.isNotEmpty && authorName == myNick) return true;
+    return false;
+  }
+
   // 🛡️ Apple Guideline 1.2: 로컬 피드 즉시 숨김(Immediate Removal)
   bool get shouldHide =>
       isBlinded ||
       reportCount >= 3 ||
-      (gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
-      gHiddenContentIds.contains(id);
+      (!isMyComment && gCurrentUser != null && reportedUserIds.contains(gCurrentUser!.id)) ||
+      (!isMyComment && gHiddenContentIds.contains(id));
 }
 
 // -------------------------------------------------------------
@@ -1232,109 +1456,453 @@ class ContentFilterService {
 
     return null;
   }
+
+  /// 텍스트 내 비속어/비방 단어 포함 여부 자동 검출 (신고 검증용)
+  static bool hasProfanity(String text) {
+    if (text.isEmpty) return false;
+    final lower = text.toLowerCase();
+    for (final word in _bannedKeywords) {
+      if (lower.contains(word)) return true;
+    }
+    return false;
+  }
+
+  /// 텍스트 내 광고/도배/상업적 패턴 포함 여부 자동 검출 (신고 검증용)
+  static bool hasAdOrSpam(String text) {
+    if (text.isEmpty) return false;
+    final lower = text.toLowerCase();
+    if (_phoneRegex.hasMatch(text)) return true;
+    if (_urlRegex.hasMatch(text)) return true;
+    for (final contact in _externalContactKeywords) {
+      if (lower.contains(contact.toLowerCase())) return true;
+    }
+    const adKeywords = ['강습문의', '강습 알바', '렌탈할인', '수강생', '입금', '계좌', '입금요구'];
+    for (final ad in adKeywords) {
+      if (lower.contains(ad)) return true;
+    }
+    return false;
+  }
 }
 
 // -------------------------------------------------------------
-// 🚨 공통 신고 다이얼로그 (3회 누적 시 자동 블라인드)
+// 🚨 신고 카테고리 정의 및 단계별 제재 정책 (공정 검증 기준)
 // -------------------------------------------------------------
 
-void showReportContentDialog({
-  required BuildContext context,
-  required String targetType, // '모집글' or '후기'
-  required String targetAuthor,
-  required int currentReportCount,
-  required Function(String reason) onReportSuccess,
-}) {
-  String selectedReason = '광고 / 상업적 홍보';
-  final reasons = [
-    '광고 / 상업적 홍보',
-    '음란물 / 선정적 게시글',
-    '외부 연락처 / 불법 링크 공유',
-    '욕설 / 비하 / 불쾌한 언행',
-    '낚시 / 도배 / 기타 비매너',
-  ];
+class ReportCategoryOption {
+  final String id;
+  final String name;
+  final String description;
+  final String badgeText;
+  final Color badgeColor;
+  final IconData icon;
 
-  showDialog(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                const Icon(Icons.flag_rounded, color: Colors.red, size: 22),
-                const SizedBox(width: 8),
-                Text('$targetType 신고하기', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-              ],
+  const ReportCategoryOption({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.badgeText,
+    required this.badgeColor,
+    required this.icon,
+  });
+}
+
+const List<ReportCategoryOption> kReportCategories = [
+  ReportCategoryOption(
+    id: 'profanity',
+    name: '욕설 및 타인 비방 / 성희롱',
+    description: '채팅·댓글 내 언어폭력, 모욕, 비하, 성적 불쾌감 유발',
+    badgeText: '1회 적발 즉시 24h 제한',
+    badgeColor: Colors.red,
+    icon: Icons.record_voice_over_rounded,
+  ),
+  ReportCategoryOption(
+    id: 'ad_spam',
+    name: '광고 / 도배 / 상업적 유도',
+    description: '강습 알바·렌탈샵 홍보, 오픈채팅 링크, 금전 요구',
+    badgeText: '1회 적발 즉시 24h 제한',
+    badgeColor: Colors.orange,
+    icon: Icons.campaign_rounded,
+  ),
+  ReportCategoryOption(
+    id: 'no_show',
+    name: '매칭 노쇼(No-Show) / 고의 잠수',
+    description: '4인 파티 매칭 후 현장 불참, 대화 잠수, 고의적 트롤링',
+    badgeText: '3회 누적 시 제재',
+    badgeColor: Colors.purple,
+    icon: Icons.person_off_rounded,
+  ),
+  ReportCategoryOption(
+    id: 'fraud_other',
+    name: '허위 모집 / 불법 행위 및 기타',
+    description: '실력·장비 스펙 사기, 불법 거래, 기타 커뮤니티 규칙 위반',
+    badgeText: '3회 누적 시 제재',
+    badgeColor: Colors.indigo,
+    icon: Icons.report_problem_rounded,
+  ),
+];
+
+/// 🚫 현재 로그인 유저의 계정 이용 제한(제재) 상태 검사 및 경고 다이얼로그
+bool checkUserSanctionAndAlert(BuildContext context) {
+  final user = gCurrentUser;
+  if (user == null) return false;
+
+  if (user.isPermanentlyBanned) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Row(
+          children: [
+            Icon(Icons.block_rounded, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Text('계정 영구 정지 안내', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.red)),
+          ],
+        ),
+        content: const Text(
+          '회원님의 계정은 커뮤니티 이용 규약 4회 누적 위반으로 인해 영구 정지 조치되었습니다.\n\n건전한 슬로프 문화 조성을 위해 모든 글쓰기, 댓글 작성 및 파티 매칭 참여가 영구히 제한됩니다.',
+          style: TextStyle(fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+    return true; // 제재 상태
+  }
+
+  if (user.sanctionUntil != null && DateTime.now().isBefore(user.sanctionUntil!)) {
+    final diff = user.sanctionUntil!.difference(DateTime.now());
+    final hours = diff.inHours;
+    final minutes = diff.inMinutes % 60;
+    final timeStr = hours > 0 ? '$hours시간 $minutes분' : '$minutes분';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 24),
+            const SizedBox(width: 8),
+            Text('계정 이용 제한 (${user.sanctionCount}차 제재)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
                 children: [
-                  Text('작성자: $targetAuthor', style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600)),
-                  const SizedBox(height: 12),
-                  const Text('신고 사유를 선택해주세요:', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  ...reasons.map((r) => RadioListTile<String>(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(r, style: const TextStyle(fontSize: 13)),
-                    value: r,
-                    groupValue: selectedReason,
-                    activeColor: const Color(0xFF2563EB),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => selectedReason = val);
-                      }
-                    },
-                  )),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.red.shade100),
-                    ),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.shield_outlined, color: Colors.red, size: 16),
-                        SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '🛡️ 안전 정책 안내 (Apple Guideline 1.2)\n'
-                            '• 신고 접수 즉시 회원님의 피드에서 해당 게시글이 즉시 숨김(삭제) 처리됩니다.\n'
-                            '• 접수된 신고는 24시간 이내에 관리자가 전수 검토하여 부적절한 콘텐츠를 영구 삭제하고, 불량 이용자는 무관용 원칙(Zero-Tolerance)에 따라 영구 퇴출(계정 영구 정지) 조치합니다.',
-                            style: TextStyle(fontSize: 11, color: Color(0xFF7F1D1D), height: 1.4),
-                          ),
-                        ),
-                      ],
+                  Icon(Icons.timer_outlined, color: Colors.orange.shade800, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '남은 제한 시간: $timeStr',
+                      style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
                     ),
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  onReportSuccess(selectedReason);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade600,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            const SizedBox(height: 12),
+            Text(
+              '회원님의 계정은 커뮤니티 이용 가이드라인 위반(${user.sanctionReason ?? "규정 위반"})으로 인해 현재 일시 제한 중입니다.\n\n• 제한 기간: ${user.sanctionCount == 1 ? "24시간" : (user.sanctionCount == 2 ? "72시간" : "144시간")}\n• 제한 항목: 모집글 작성, 댓글 등록, 파티 매칭 참여\n\n깨끗하고 안전한 슬로프 매칭을 위해 협조 부탁드립니다.',
+              style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.45),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+    return true; // 제재 상태
+  }
+
+  return false;
+}
+
+// -------------------------------------------------------------
+// 🚨 공통 신고 다이얼로그 (유형 선택 모달 & 공정 검증 파이프라인)
+// -------------------------------------------------------------
+
+void showReportContentDialog({
+  required BuildContext context,
+  required String targetType, // '모집글', '후기', '한줄평', '참가자'
+  required String targetAuthor,
+  String? targetUid,
+  String? targetId,
+  String? contentSnippet,
+  int currentReportCount = 0,
+  required Function(String categoryId, String categoryName, String details) onReportSuccess,
+}) {
+  ReportCategoryOption selectedCategory = kReportCategories.first;
+  final detailsController = TextEditingController();
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.flag_rounded, color: Colors.red.shade600, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$targetType 신고하기',
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: -0.3),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '대상: $targetAuthor',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      '신고 유형 선택 (공정 검증 기준 적용)',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 8),
+
+                    ...kReportCategories.map((cat) {
+                      final isSelected = selectedCategory.id == cat.id;
+                      return InkWell(
+                        onTap: () {
+                          setModalState(() {
+                            selectedCategory = cat;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.05) : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade200,
+                              width: isSelected ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(cat.icon, size: 20, color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade600),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            cat.name,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: isSelected ? const Color(0xFF2563EB) : Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: cat.badgeColor.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            cat.badgeText,
+                                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: cat.badgeColor),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      cat.description,
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade400,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: detailsController,
+                      maxLines: 2,
+                      maxLength: 100,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: '구체적인 피해 내용이나 정황을 적어주세요 (선택 사항)',
+                        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                        contentPadding: const EdgeInsets.all(12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.gavel_rounded, color: Colors.indigo.shade700, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                '공정 검증 및 단계별 이용 제한 정책',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo.shade900),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '• 위반 확정 시: 1회 24시간 / 2회 72시간 / 3회 144시간 / 4회 영구 정지 조치됩니다.\n'
+                            '• 욕설 및 광고는 텍스트 자동 검증을 거쳐 1회 즉시 위반으로 처리됩니다.\n'
+                            '• 노쇼/잠수는 고의성 확인을 위해 3회 누적 시 위반으로 처리됩니다.\n'
+                            '• 타인을 음해하기 위한 허위 신고 적발 시 신고자 본인의 계정 이용이 제한될 수 있습니다.',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700, height: 1.45),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              side: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            child: const Text('취소', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              onReportSuccess(
+                                selectedCategory.id,
+                                selectedCategory.name,
+                                detailsController.text.trim(),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            child: const Text('신고 접수', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                child: const Text('신고 접수'),
               ),
-            ],
+            ),
           );
         },
       );
@@ -1357,15 +1925,16 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.snowboarding_rounded,
     themeColor: Color(0xFF1E40AF),
     detailedSlopes: [
-      DetailedSlope(name: '하늬', section: '베이스/초급', difficulty: SlopeDifficulty.beginner, length: '460m'),
-      DetailedSlope(name: '휘슬', section: '초중급', difficulty: SlopeDifficulty.novice, length: '850m'),
-      DetailedSlope(name: '와이낫 (Why Not)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '750m'),
-      DetailedSlope(name: '그램 (Gram)', section: '중급', difficulty: SlopeDifficulty.intermediate, length: '680m'),
-      DetailedSlope(name: '윈디 (Windy)', section: '정상/중상급', difficulty: SlopeDifficulty.advanced, length: '1,429m'),
-      DetailedSlope(name: '제타 1 (Zeta 1)', section: '정상/상급', difficulty: SlopeDifficulty.expert, length: '980m'),
-      DetailedSlope(name: '제타 2 (Zeta 2)', section: '상급', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m'),
-      DetailedSlope(name: '게일 (Gale)', section: '정상/최상급', difficulty: SlopeDifficulty.extreme, length: '1,050m'),
-      DetailedSlope(name: '곤지암 펀파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m'),
+      DetailedSlope(name: '휘센', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '497m', slopeDegree: '7.0°'),
+      DetailedSlope(name: 'CNP1', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '549m', slopeDegree: '10.9°'),
+      DetailedSlope(name: '씽큐2', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,049m', slopeDegree: '12.9°'),
+      DetailedSlope(name: '익시오', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '757m', slopeDegree: '10.4°'),
+      DetailedSlope(name: '그램2', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '828m', slopeDegree: '13.6°'),
+      DetailedSlope(name: '씽큐1', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '380m', slopeDegree: '14.2°'),
+      DetailedSlope(name: '씽큐3', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '462m', slopeDegree: '14.2°'),
+      DetailedSlope(name: 'CNP2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,087m', slopeDegree: '14.0°'),
+      DetailedSlope(name: '그램1', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '548m', slopeDegree: '17.3°'),
+      DetailedSlope(name: '씽큐Br', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '204m', slopeDegree: '10.9°'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~02)'],
     officialWebcamUrl: 'https://www.konjiamresort.co.kr/ski/liveCam.dev',
@@ -1380,17 +1949,17 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.downhill_skiing_rounded,
     themeColor: Color(0xFF7C3AED),
     detailedSlopes: [
-      DetailedSlope(name: '발라드 (Ballad)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '480m', mapX: 0.57, mapY: 0.54),
-      DetailedSlope(name: '블루스 (Blues)', section: '초심 구역', difficulty: SlopeDifficulty.beginner, length: '350m', mapX: 0.92, mapY: 0.56),
-      DetailedSlope(name: '재즈 (Jazz)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', mapX: 0.31, mapY: 0.52),
-      DetailedSlope(name: '레게 (Reggae)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '570m', mapX: 0.32, mapY: 0.35),
-      DetailedSlope(name: '클래식 (Classic)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '750m', mapX: 0.31, mapY: 0.20),
-      DetailedSlope(name: '락 (Rock)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '590m', mapX: 0.40, mapY: 0.29),
-      DetailedSlope(name: '테크노 1 (Techno 1)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '800m', mapX: 0.62, mapY: 0.19),
-      DetailedSlope(name: '펑키 (Funky)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, status: SlopeStatus.closed, length: '550m', mapX: 0.60, mapY: 0.30),
-      DetailedSlope(name: '테크노 2 (Techno 2)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '650m', mapX: 0.74, mapY: 0.42),
-      DetailedSlope(name: '힙합 (Hiphop)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '620m', mapX: 0.79, mapY: 0.37),
-      DetailedSlope(name: 'BMW 레이싱 코스', section: '레이싱 구역', difficulty: SlopeDifficulty.expert, length: '500m', mapX: 0.88, mapY: 0.49),
+      DetailedSlope(name: '발라드', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '508m', slopeDegree: '8.0°'),
+      DetailedSlope(name: '블루스', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '365m', slopeDegree: '4.0°'),
+      DetailedSlope(name: '재즈', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m', slopeDegree: '12.0°'),
+      DetailedSlope(name: '레게', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '570m', slopeDegree: '14.0°'),
+      DetailedSlope(name: '클래식', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '450m', slopeDegree: '12.0°'),
+      DetailedSlope(name: '테크노 1', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '480m', slopeDegree: '11.0°'),
+      DetailedSlope(name: '펑키', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '575m', slopeDegree: '16.0°'),
+      DetailedSlope(name: '힙합 1', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '240m', slopeDegree: '11.0°'),
+      DetailedSlope(name: '힙합 2', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '620m', slopeDegree: '15.0°'),
+      DetailedSlope(name: '테크노 2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '680m', slopeDegree: '17.0°'),
+      DetailedSlope(name: '락', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '610m', slopeDegree: '21.0°'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (23:00~03:00)'],
     officialWebcamUrl: 'https://www.sonohotelsresorts.com/skiboard/status',
@@ -1400,28 +1969,33 @@ const List<SkiResort> kSkiResorts = [
     name: '모나용평 (평창)',
     shortName: '모나용평',
     region: '강원 평창',
-    lat: 37.6440,
+    lat: 37.644,
     lng: 128.6797,
     icon: Icons.landscape_rounded,
     themeColor: Color(0xFF0D9488),
     detailedSlopes: [
-      DetailedSlope(name: '레인보우 파라다이스', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.novice, length: '5,600m'),
-      DetailedSlope(name: '레인보우 1 (골드)', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,200m'),
-      DetailedSlope(name: '레인보우 2', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,150m'),
-      DetailedSlope(name: '레인보우 3', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '1,050m'),
-      DetailedSlope(name: '레인보우 4', section: '발왕산 정상 (1,458m)', difficulty: SlopeDifficulty.extreme, length: '1,300m'),
-      DetailedSlope(name: '골드밸리', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,655m'),
-      DetailedSlope(name: '골드파라다이스', section: '골드 구역', difficulty: SlopeDifficulty.intermediate, length: '1,450m'),
-      DetailedSlope(name: '골드환타지', section: '골드 구역', difficulty: SlopeDifficulty.advanced, length: '1,200m'),
-      DetailedSlope(name: '레드 (Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '950m'),
-      DetailedSlope(name: '뉴레드 (New Red)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, length: '850m'),
-      DetailedSlope(name: '실버 (Silver)', section: '레드/실버 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,000m'),
-      DetailedSlope(name: '메가그린 (Mega Green)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '700m'),
-      DetailedSlope(name: '핑크 (Pink)', section: '베이스 구역', difficulty: SlopeDifficulty.novice, length: '650m'),
-      DetailedSlope(name: '옐로우 (Yellow)', section: '베이스 구역', difficulty: SlopeDifficulty.beginner, length: '550m'),
-      DetailedSlope(name: '드래곤 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m'),
+      DetailedSlope(name: '뉴옐로우', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m', slopeDegree: '6.3°'),
+      DetailedSlope(name: '옐로우', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '600m', slopeDegree: '6.8°'),
+      DetailedSlope(name: '메가그린', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,000m', slopeDegree: '8.5°'),
+      DetailedSlope(name: '핑크', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '600m', slopeDegree: '8.0°'),
+      DetailedSlope(name: '골드파라다이스', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,520m', slopeDegree: '8.0°'),
+      DetailedSlope(name: '레드파라다이스', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,000m', slopeDegree: '12.4°'),
+      DetailedSlope(name: '레인보우파라다이스', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '5,600m', slopeDegree: '7.4°'),
+      DetailedSlope(name: '실버파라다이스', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,460m', slopeDegree: '10.2°'),
+      DetailedSlope(name: '골드 환타스틱', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,850m', slopeDegree: '10.2°'),
+      DetailedSlope(name: '골드밸리', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,850m', slopeDegree: '11.3°'),
+      DetailedSlope(name: '뉴레드', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '500m', slopeDegree: '19.8°'),
+      DetailedSlope(name: '레인보우 4', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '635m', slopeDegree: '15.6°'),
+      DetailedSlope(name: '블루', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '300m', slopeDegree: '16.2°'),
+      DetailedSlope(name: '뉴골드', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '650m', slopeDegree: '17.2°'),
+      DetailedSlope(name: '레드', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,000m', slopeDegree: '11.9°'),
+      DetailedSlope(name: '레인보우 1', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,607m', slopeDegree: '17.2°'),
+      DetailedSlope(name: '레인보우 2', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '752m', slopeDegree: '21.3°'),
+      DetailedSlope(name: '레인보우 3', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,046m', slopeDegree: '18.3°'),
+      DetailedSlope(name: '실버', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,000m', slopeDegree: '16.2°'),
+      DetailedSlope(name: '드래곤파크', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '1,046m', slopeDegree: '18.3°'),
     ],
-    availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (19:00~22:00)'],
+    availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (19~22)'],
     officialWebcamUrl: 'https://www.yongpyong.co.kr/kor/guide/realTimeNews/ypResortWebcam.do',
   ),
   SkiResort(
@@ -1429,28 +2003,30 @@ const List<SkiResort> kSkiResorts = [
     name: '휘닉스파크 (평창)',
     shortName: '휘닉스',
     region: '강원 평창',
-    lat: 37.5815,
-    lng: 128.3248,
+    lat: 37.581,
+    lng: 128.3262,
     icon: Icons.ac_unit_rounded,
-    themeColor: Color(0xFF16A34A),
+    themeColor: Color(0xFF2563EB),
     detailedSlopes: [
-      DetailedSlope(name: '불새마루 도도 (Dodo)', section: '불새마루 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m'),
-      DetailedSlope(name: '불새마루 듀크 (Duke)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '950m'),
-      DetailedSlope(name: '불새마루 키위 (Kiwi)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '750m'),
-      DetailedSlope(name: '스패로우 (Sparrow)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '920m'),
-      DetailedSlope(name: '펭귄 (Penguin)', section: '불새마루 구역', difficulty: SlopeDifficulty.beginner, length: '650m'),
-      DetailedSlope(name: '호크 1 (Hawk 1)', section: '불새마루 구역', difficulty: SlopeDifficulty.novice, length: '1,050m'),
-      DetailedSlope(name: '호크 2 (Hawk 2)', section: '불새마루 구역', difficulty: SlopeDifficulty.intermediate, length: '800m'),
-      DetailedSlope(name: '파노라마 (Panorama)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.novice, length: '2,400m'),
-      DetailedSlope(name: '챔피온 (Champion)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '1,000m'),
-      DetailedSlope(name: '디지 (Dizzy)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.extreme, length: '850m'),
-      DetailedSlope(name: '밸리 (Valley)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.advanced, length: '1,120m'),
-      DetailedSlope(name: '환타지아 (Fantasia)', section: '몽블랑 정상 (1,050m)', difficulty: SlopeDifficulty.expert, length: '900m'),
-      DetailedSlope(name: '슬로프스타일 (익스트림 파크)', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '600m'),
-      DetailedSlope(name: '슈퍼 하프파이프', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '160m'),
-      DetailedSlope(name: '펀파크 & 웨이브존', section: '익스트림 파크', difficulty: SlopeDifficulty.novice, status: SlopeStatus.park, length: '450m'),
+      DetailedSlope(name: '도도(강습전용)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m', slopeDegree: '6.7°'),
+      DetailedSlope(name: '스패로우', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '978m', slopeDegree: '7.0°'),
+      DetailedSlope(name: '펭귄', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '665m', slopeDegree: '8.3°'),
+      DetailedSlope(name: '키위', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '550m', slopeDegree: '13.0°'),
+      DetailedSlope(name: '파노라마', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,450m', slopeDegree: '10.0°'),
+      DetailedSlope(name: '호크', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '643m', slopeDegree: '11.3°'),
+      DetailedSlope(name: '듀크(이상호)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '818m', slopeDegree: '13.8°'),
+      DetailedSlope(name: '밸리', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,110m', slopeDegree: '15.4°'),
+      DetailedSlope(name: '슬로프스타일(SS/SBS)', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '602m', slopeDegree: '14.9°'),
+      DetailedSlope(name: '챔피온', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '960m', slopeDegree: '16.1°'),
+      DetailedSlope(name: '환타지', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '503m', slopeDegree: '10.1°'),
+      DetailedSlope(name: '디지', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '866m', slopeDegree: '15.4°'),
+      DetailedSlope(name: '모글', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '319m', slopeDegree: '19.0°'),
+      DetailedSlope(name: '파라다이스', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '912m', slopeDegree: '15.7°'),
+      DetailedSlope(name: '익스트림파크(상단)', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '765m', slopeDegree: '9.3°'),
+      DetailedSlope(name: '익스트림파크(하단)', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '765m', slopeDegree: '9.3°'),
+      DetailedSlope(name: '하프파이프', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '168m', slopeDegree: '16.7°'),
     ],
-    availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18~22)', '심야 (22~24)'],
+    availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)', '심야 (22~24)'],
     officialWebcamUrl: 'https://phoenixhnr.co.kr/m/page/pyeongchang/guide/operation/sketchMovie',
   ),
   SkiResort(
@@ -1458,28 +2034,30 @@ const List<SkiResort> kSkiResorts = [
     name: '하이원리조트 (정선)',
     shortName: '하이원',
     region: '강원 정선',
-    lat: 37.2078,
-    lng: 128.8354,
-    icon: Icons.terrain_rounded,
-    themeColor: Color(0xFF6B21A8),
+    lat: 37.2064,
+    lng: 128.8373,
+    icon: Icons.nordic_walking_rounded,
+    themeColor: Color(0xFF4F46E5),
     detailedSlopes: [
-      DetailedSlope(name: '빅토리아 1', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, length: '1,439m'),
-      DetailedSlope(name: '빅토리아 2', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '1,300m'),
-      DetailedSlope(name: '빅토리아 3', section: '빅토리아 구역 (백운산 1,340m)', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.closed, length: '1,150m'),
-      DetailedSlope(name: '헤라 1', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.intermediate, length: '1,504m'),
-      DetailedSlope(name: '헤라 2', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.advanced, status: SlopeStatus.mogul, length: '1,230m'),
-      DetailedSlope(name: '헤라 3', section: '헤라 구역 (마운틴탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,100m'),
-      DetailedSlope(name: '아폴로 1', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,803m'),
-      DetailedSlope(name: '아폴로 2', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,250m'),
-      DetailedSlope(name: '아폴로 3', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.advanced, length: '1,400m'),
-      DetailedSlope(name: '아폴로 4', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, length: '1,550m'),
-      DetailedSlope(name: '아폴로 6', section: '아폴로 구역 (밸리탑)', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '1,180m'),
-      DetailedSlope(name: '아테나 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,700m'),
-      DetailedSlope(name: '아테나 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.novice, length: '1,670m'),
-      DetailedSlope(name: '아테나 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,200m'),
-      DetailedSlope(name: '제우스 1', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '2,329m'),
-      DetailedSlope(name: '제우스 2', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,840m'),
-      DetailedSlope(name: '제우스 3', section: '아테나/제우스 구역', difficulty: SlopeDifficulty.beginner, length: '1,020m'),
+      DetailedSlope(name: '아테나 3', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '1,862m', slopeDegree: '7.3°'),
+      DetailedSlope(name: '아테나 3-1', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '1,162m', slopeDegree: '6.8°'),
+      DetailedSlope(name: '제우스 1', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '2,328m', slopeDegree: '9.5°'),
+      DetailedSlope(name: '제우스 2', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '2,198m', slopeDegree: '7.5°'),
+      DetailedSlope(name: '제우스 3', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '1,835m', slopeDegree: '8.7°'),
+      DetailedSlope(name: '제우스 3-1', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '1,023m', slopeDegree: '6.8°'),
+      DetailedSlope(name: '아테나 2', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,666m', slopeDegree: '10.7°'),
+      DetailedSlope(name: '헤라 1', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,508m', slopeDegree: '14.9°'),
+      DetailedSlope(name: '헤라 2', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,301m', slopeDegree: '17.4°'),
+      DetailedSlope(name: '빅토리아 1', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,439m', slopeDegree: '15.6°'),
+      DetailedSlope(name: '빅토리아 2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,382m', slopeDegree: '18.7°'),
+      DetailedSlope(name: '아폴로 1', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,506m', slopeDegree: '11.3°'),
+      DetailedSlope(name: '아폴로 2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '863m', slopeDegree: '20.3°'),
+      DetailedSlope(name: '아폴로 3', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '754m', slopeDegree: '15.8°'),
+      DetailedSlope(name: '아폴로 4', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,569m', slopeDegree: '15.4°'),
+      DetailedSlope(name: '아폴로 6', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,543m', slopeDegree: '18.0°'),
+      DetailedSlope(name: '헤라 3', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,278m', slopeDegree: '19.8°'),
+      DetailedSlope(name: '빅토리아 3', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,311m', slopeDegree: '17.0°'),
+      DetailedSlope(name: '아폴로 5', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,239m', slopeDegree: '22.1°'),
     ],
     availableTimeSlots: ['주간 (09~16)', '오후 (12~16)', '야간 (18~22)'],
     officialWebcamUrl: 'https://www.high1.com/ski/slopeView.do?key=748&mode=p',
@@ -1490,19 +2068,28 @@ const List<SkiResort> kSkiResorts = [
     shortName: '웰리힐리',
     region: '강원 횡성',
     lat: 37.4877,
-    lng: 128.2494,
-    icon: Icons.snowshoeing_rounded,
-    themeColor: Color(0xFF0F766E),
+    lng: 128.2497,
+    icon: Icons.snowing,
+    themeColor: Color(0xFFEA580C),
     detailedSlopes: [
-      DetailedSlope(name: '알파 1 (A1)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '700m'),
-      DetailedSlope(name: '알파 2, 3 (A2/A3)', section: '알파/베이스', difficulty: SlopeDifficulty.beginner, length: '600m'),
-      DetailedSlope(name: '브라보 1 (B1)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m'),
-      DetailedSlope(name: '브라보 2 (B2)', section: '브라보 구역', difficulty: SlopeDifficulty.intermediate, length: '950m'),
-      DetailedSlope(name: '에코 1, 2 (E1/E2)', section: '에코 구역', difficulty: SlopeDifficulty.intermediate, length: '900m'),
-      DetailedSlope(name: '챌린지 1, 2 (C1/C2)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '850m'),
-      DetailedSlope(name: '챌린지 4, 5 (C4/C5)', section: '챌린지 구역', difficulty: SlopeDifficulty.extreme, status: SlopeStatus.mogul, length: '950m'),
-      DetailedSlope(name: '스타익스프레스', section: '관광 롱코스', difficulty: SlopeDifficulty.novice, length: '2,100m'),
-      DetailedSlope(name: '웰리 펀파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '650m'),
+      DetailedSlope(name: 'A2', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '598m', slopeDegree: ''),
+      DetailedSlope(name: 'D1', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '620m', slopeDegree: ''),
+      DetailedSlope(name: 'S2', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '814m', slopeDegree: ''),
+      DetailedSlope(name: 'B1', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,112m', slopeDegree: ''),
+      DetailedSlope(name: 'B2', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,038m', slopeDegree: ''),
+      DetailedSlope(name: 'D+', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,000m', slopeDegree: ''),
+      DetailedSlope(name: 'S1', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,786m', slopeDegree: ''),
+      DetailedSlope(name: 'C1', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '370m', slopeDegree: ''),
+      DetailedSlope(name: 'C2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '275m', slopeDegree: ''),
+      DetailedSlope(name: 'C4', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '827m', slopeDegree: ''),
+      DetailedSlope(name: 'C5', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '661m', slopeDegree: ''),
+      DetailedSlope(name: 'E2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '650m', slopeDegree: ''),
+      DetailedSlope(name: 'C3', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '504m', slopeDegree: ''),
+      DetailedSlope(name: 'E1', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '625m', slopeDegree: ''),
+      DetailedSlope(name: 'E3', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '321m', slopeDegree: ''),
+      DetailedSlope(name: 'A1', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '450m', slopeDegree: ''),
+      DetailedSlope(name: 'A3', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '539m', slopeDegree: ''),
+      DetailedSlope(name: 'D2', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '150m', slopeDegree: ''),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:30)', '심야 (22:30~24:00)'],
     officialWebcamUrl: 'https://m.wellihillipark.com/customer/webcam',
@@ -1517,14 +2104,13 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.forest_rounded,
     themeColor: Color(0xFF16A34A),
     detailedSlopes: [
-      DetailedSlope(name: '1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '950m'),
-      DetailedSlope(name: '1-1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '300m'),
-      DetailedSlope(name: '2번 슬로프 (오렌지)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '700m'),
-      DetailedSlope(name: '3번 슬로프 (뉴오렌지)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m'),
-      DetailedSlope(name: '5번 슬로프 (구 블루/실버)', section: '상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,100m'),
-      DetailedSlope(name: '6번 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '800m'),
-      DetailedSlope(name: '7번 슬로프 (구 블랙)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '950m'),
-      DetailedSlope(name: '지산 익스트림 파크', section: '익스트림 파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '500m'),
+      DetailedSlope(name: '1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '300m', slopeDegree: '7.0°'),
+      DetailedSlope(name: '1-1번 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '300m', slopeDegree: '5.0°'),
+      DetailedSlope(name: '2번 슬로프', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '700m', slopeDegree: '9.0°'),
+      DetailedSlope(name: '3번 슬로프', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '720m', slopeDegree: '9.0°'),
+      DetailedSlope(name: '5번 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '870m', slopeDegree: '21.0°'),
+      DetailedSlope(name: '6번 슬로프', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '900m', slopeDegree: '24.0°'),
+      DetailedSlope(name: '7번 슬로프', section: '중상급 구역', difficulty: SlopeDifficulty.advanced, length: '1,200m', slopeDegree: '13.0°'),
     ],
     availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~23:00)', '심야 (23:00~02:00)'],
     officialWebcamUrl: 'https://www.jisanresort.co.kr/m/ski/slopes/webcam.asp',
@@ -1535,15 +2121,23 @@ const List<SkiResort> kSkiResorts = [
     shortName: '오투',
     region: '강원 태백',
     lat: 37.1772,
-    lng: 128.9489,
+    lng: 128.9463,
     icon: Icons.cloud_rounded,
     themeColor: Color(0xFF0284C7),
     detailedSlopes: [
-      DetailedSlope(name: '드림 1, 2 (Dream)', section: '드림 구역', difficulty: SlopeDifficulty.beginner, length: '1,100m'),
-      DetailedSlope(name: '해피 (Happy)', section: '해피 구역', difficulty: SlopeDifficulty.novice, length: '2,150m'),
-      DetailedSlope(name: '글로리 1, 2 (Glory)', section: '글로리 구역', difficulty: SlopeDifficulty.intermediate, length: '1,400m'),
-      DetailedSlope(name: '챌린지 (Challenge)', section: '챌린지 구역', difficulty: SlopeDifficulty.expert, length: '900m'),
-      DetailedSlope(name: '패션 (Passion)', section: '상급 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.closed, length: '750m'),
+      DetailedSlope(name: '드림1', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '556m', slopeDegree: '5.1°'),
+      DetailedSlope(name: '드림2', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '963m', slopeDegree: '6.8°'),
+      DetailedSlope(name: '해피', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '2,144m', slopeDegree: '10.2°'),
+      DetailedSlope(name: '헤드', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,155m', slopeDegree: '8.5°'),
+      DetailedSlope(name: '글로리1', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '561m', slopeDegree: '17.2°'),
+      DetailedSlope(name: '글로리2', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '628m', slopeDegree: '15.1°'),
+      DetailedSlope(name: '글로리3', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '3,256m', slopeDegree: '10.8°'),
+      DetailedSlope(name: '첼린지1', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '582m', slopeDegree: '17.7°'),
+      DetailedSlope(name: '첼린지2', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '807m', slopeDegree: '22.3°'),
+      DetailedSlope(name: '첼린지3', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '753m', slopeDegree: '21.8°'),
+      DetailedSlope(name: '패션1', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '1,057m', slopeDegree: '19.8°'),
+      DetailedSlope(name: '패션2', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '735m', slopeDegree: '17.7°'),
+      DetailedSlope(name: '하프파이프', section: '파크 구역', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '345m', slopeDegree: '13.5°'),
     ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~21:30)'],
     officialWebcamUrl: 'https://www.o2resort.com/GDE/webcam.jsp',
@@ -1551,22 +2145,24 @@ const List<SkiResort> kSkiResorts = [
   SkiResort(
     id: 'elysian',
     name: '엘리시안 강촌 (춘천)',
-    shortName: '강촌',
+    shortName: '엘리시안',
     region: '강원 춘천',
-    lat: 37.8208,
-    lng: 127.5880,
-    icon: Icons.park_rounded,
-    themeColor: Color(0xFF4B5563),
+    lat: 37.8197,
+    lng: 127.5878,
+    icon: Icons.train_rounded,
+    themeColor: Color(0xFF9333EA),
     detailedSlopes: [
-      DetailedSlope(name: '팬더 (Panda)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '500m'),
-      DetailedSlope(name: '래빗 (Rabbit)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '350m'),
-      DetailedSlope(name: '드래곤 (Dragon)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,050m'),
-      DetailedSlope(name: '디어 (Deer)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '900m'),
-      DetailedSlope(name: '퓨마 (Puma)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m'),
-      DetailedSlope(name: '페가수스 (Pegasus)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '850m'),
-      DetailedSlope(name: '강촌 익스트림 파크', section: '파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '400m'),
+      DetailedSlope(name: '래빗', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '436m', slopeDegree: ''),
+      DetailedSlope(name: '팬더', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '306m', slopeDegree: '5.1°'),
+      DetailedSlope(name: '드래곤/래빗', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,500m', slopeDegree: ''),
+      DetailedSlope(name: '디어', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '945m', slopeDegree: ''),
+      DetailedSlope(name: '퓨마', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,175m', slopeDegree: ''),
+      DetailedSlope(name: '호스/제브라', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,032m', slopeDegree: ''),
+      DetailedSlope(name: '호스/페가수스', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,045m', slopeDegree: ''),
+      DetailedSlope(name: '레퍼드', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '518m', slopeDegree: ''),
+      DetailedSlope(name: '재규어', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '524m', slopeDegree: ''),
     ],
-    availableTimeSlots: ['주간 (09~17)', '오후 (13~17)', '야간 (18:30~22:30)', '심야 (22:30~03:00)'],
+    availableTimeSlots: ['주간 (09~17)', '오후 (12~17)', '야간 (18:30~24)', '심야 (24~03)'],
     officialWebcamUrl: 'https://www.elysian.co.kr/about-gangchon/ski#guide-to-using-slopes',
   ),
   SkiResort(
@@ -1574,22 +2170,34 @@ const List<SkiResort> kSkiResorts = [
     name: '무주 덕유산 (무주)',
     shortName: '무주',
     region: '전북 무주',
-    lat: 35.8899,
-    lng: 127.7417,
+    lat: 35.8906,
+    lng: 127.7397,
     icon: Icons.filter_hdr_rounded,
-    themeColor: Color(0xFF0284C7),
+    themeColor: Color(0xFFDC2626),
     detailedSlopes: [
-      DetailedSlope(name: '실크로드 상단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,100m'),
-      DetailedSlope(name: '실크로드 하단', section: '설천봉 (1,520m)', difficulty: SlopeDifficulty.novice, length: '3,000m'),
-      DetailedSlope(name: '루키힐', section: '만선베이스', difficulty: SlopeDifficulty.intermediate, length: '1,200m'),
-      DetailedSlope(name: '커넥션', section: '만선베이스', difficulty: SlopeDifficulty.beginner, length: '800m'),
-      DetailedSlope(name: '레이더스 상단', section: '만선봉 정상', difficulty: SlopeDifficulty.extreme, length: '950m'),
-      DetailedSlope(name: '레이더스 하단', section: '만선봉 정상', difficulty: SlopeDifficulty.expert, length: '800m'),
-      DetailedSlope(name: '프리폴', section: '설천 구역', difficulty: SlopeDifficulty.expert, length: '750m'),
-      DetailedSlope(name: '야마가', section: '만선 구역', difficulty: SlopeDifficulty.expert, status: SlopeStatus.mogul, length: '850m'),
-      DetailedSlope(name: '미뉴에트 / 모차르트', section: '설천봉 능선', difficulty: SlopeDifficulty.expert, length: '1,000m'),
+      DetailedSlope(name: '서역기행', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '3,413m', slopeDegree: '7.8°'),
+      DetailedSlope(name: '스피츠 하단', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '720m', slopeDegree: '10.0°'),
+      DetailedSlope(name: '이스턴', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '374m', slopeDegree: '10.1°'),
+      DetailedSlope(name: '루키힐', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '721m', slopeDegree: '12.0°'),
+      DetailedSlope(name: '실크로드 상단', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '4,386m', slopeDegree: '8.3°'),
+      DetailedSlope(name: '실크로드 하단', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,714m', slopeDegree: '10.1°'),
+      DetailedSlope(name: '썬다운', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '577m', slopeDegree: '15.4°'),
+      DetailedSlope(name: '웨스턴', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '305m', slopeDegree: '9.5°'),
+      DetailedSlope(name: '커넥션', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,078m', slopeDegree: '11.8°'),
+      DetailedSlope(name: '터보', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,430m', slopeDegree: '10.6°'),
+      DetailedSlope(name: '레이더스 하단', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '473m', slopeDegree: '17.1°'),
+      DetailedSlope(name: '미뉴에트', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,339m', slopeDegree: '17.0°'),
+      DetailedSlope(name: '야마가', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '1,039m', slopeDegree: '14.8°'),
+      DetailedSlope(name: '파노라마', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '737m', slopeDegree: '13.9°'),
+      DetailedSlope(name: '프리웨이', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '879m', slopeDegree: '13.0°'),
+      DetailedSlope(name: '레이더스 상단', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '480m', slopeDegree: '21.3°'),
+      DetailedSlope(name: '모차르트', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '520m', slopeDegree: '21.4°'),
+      DetailedSlope(name: '알레그로', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '467m', slopeDegree: '20.8°'),
+      DetailedSlope(name: '왈츠', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '111m', slopeDegree: '7.2°'),
+      DetailedSlope(name: '카덴자', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '252m', slopeDegree: '16.4°'),
+      DetailedSlope(name: '폴카', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '428m', slopeDegree: '21.0°'),
     ],
-    availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
+    availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)', '자정 (21~23)'],
     officialWebcamUrl: 'https://www.mdysresort.com/guide/webcam.asp',
   ),
   SkiResort(
@@ -1599,15 +2207,15 @@ const List<SkiResort> kSkiResorts = [
     region: '강원 평창',
     lat: 37.6542,
     lng: 128.6713,
-    icon: Icons.terrain_rounded,
-    themeColor: Color(0xFFD97706),
+    icon: Icons.villa_rounded,
+    themeColor: Color(0xFF059669),
     detailedSlopes: [
-      DetailedSlope(name: '알파 (Alpha)', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '650m', mapX: 0.88, mapY: 0.44),
-      DetailedSlope(name: '브라보 (Bravo)', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '950m', mapX: 0.85, mapY: 0.27),
-      DetailedSlope(name: '찰리 (Charlie)', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m', mapX: 0.60, mapY: 0.42),
-      DetailedSlope(name: '델타 (Delta)', section: '상급 구역', difficulty: SlopeDifficulty.advanced, length: '850m', mapX: 0.39, mapY: 0.51),
-      DetailedSlope(name: '에코 (Echo)', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m', mapX: 0.26, mapY: 0.51),
-      DetailedSlope(name: '폭스트롯 (Foxtrot)', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '600m', mapX: 0.08, mapY: 0.44),
+      DetailedSlope(name: '알파', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '648m', slopeDegree: '3.9°'),
+      DetailedSlope(name: '브라보', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,351m', slopeDegree: '4.9°'),
+      DetailedSlope(name: '델타', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '634m', slopeDegree: '9.4°'),
+      DetailedSlope(name: '에코', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '762m', slopeDegree: '9.0°'),
+      DetailedSlope(name: '찰리', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '374m', slopeDegree: '11.9°'),
+      DetailedSlope(name: '폭스트롯', section: '최상급 구역', difficulty: SlopeDifficulty.extreme, length: '826m', slopeDegree: '8.2°'),
     ],
     availableTimeSlots: ['주간 (08:30~16:30)', '오후 (12:30~16:30)', '야간 (18:30~22:00)'],
     officialWebcamUrl: 'https://www.alpensia.com/guide/web-cam.do',
@@ -1622,51 +2230,133 @@ const List<SkiResort> kSkiResorts = [
     icon: Icons.nature_people_rounded,
     themeColor: Color(0xFF0369A1),
     detailedSlopes: [
-      DetailedSlope(name: 'I 슬로프', section: '초심 구역', difficulty: SlopeDifficulty.beginner, length: '500m'),
-      DetailedSlope(name: 'H 슬로프', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '600m'),
-      DetailedSlope(name: 'A 슬로프', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '1,400m'),
-      DetailedSlope(name: 'B 슬로프', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,100m'),
-      DetailedSlope(name: 'C 슬로프 (펀파크)', section: '중급/파크', difficulty: SlopeDifficulty.park, status: SlopeStatus.park, length: '850m'),
-      DetailedSlope(name: 'D 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '900m'),
-      DetailedSlope(name: 'D-1 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '650m'),
-      DetailedSlope(name: 'E 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '750m'),
-      DetailedSlope(name: 'F 슬로프', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '800m'),
-      DetailedSlope(name: 'G 슬로프', section: '초중급 구역', difficulty: SlopeDifficulty.novice, length: '950m'),
+      DetailedSlope(name: 'H', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '625m', slopeDegree: '6.3°'),
+      DetailedSlope(name: 'I', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '550m', slopeDegree: '5.1°'),
+      DetailedSlope(name: 'A', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,610m', slopeDegree: '9.1°'),
+      DetailedSlope(name: 'D', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '885m', slopeDegree: '16.2°'),
+      DetailedSlope(name: 'D-1', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '240m', slopeDegree: '15.1°'),
+      DetailedSlope(name: 'E', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '485m', slopeDegree: '11.3°'),
+      DetailedSlope(name: 'F', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '604m', slopeDegree: '14.0°'),
+      DetailedSlope(name: 'G', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '724m', slopeDegree: '10.8°'),
+      DetailedSlope(name: 'B', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '885m', slopeDegree: '13.0°'),
+      DetailedSlope(name: 'C', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '375m', slopeDegree: '17.7°'),
     ],
     availableTimeSlots: ['주간 (09~16:30)', '오후 (12:30~16:30)', '야간 (18~22:30)'],
     officialWebcamUrl: 'https://oakvalley.co.kr/ski/introduction/realtime',
   ),
+  SkiResort(
+    id: 'edenvalley',
+    name: '에덴밸리 리조트 (양산)',
+    shortName: '에덴밸리',
+    region: '경남 양산',
+    lat: 35.4285,
+    lng: 128.9836,
+    icon: Icons.terrain_rounded,
+    themeColor: Color(0xFF0D9488),
+    detailedSlopes: [
+      DetailedSlope(name: '베이직', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '587m', slopeDegree: '6.8°'),
+      DetailedSlope(name: '메인', section: '초급 구역', difficulty: SlopeDifficulty.beginner, length: '454m', slopeDegree: '5.7°'),
+      DetailedSlope(name: '쥬피터', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,023m', slopeDegree: '9.6°'),
+      DetailedSlope(name: '새턴', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '851m', slopeDegree: '12.4°'),
+      DetailedSlope(name: '우라누스', section: '중급 구역', difficulty: SlopeDifficulty.intermediate, length: '1,495m', slopeDegree: '9.1°'),
+      DetailedSlope(name: '비너스', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '862m', slopeDegree: '16.7°'),
+      DetailedSlope(name: '머큐리', section: '상급 구역', difficulty: SlopeDifficulty.expert, length: '949m', slopeDegree: '15.1°'),
+    ],
+    availableTimeSlots: ['주간 (09:30~16:30)', '오후 (13:00~16:30)', '야간 (18:30~23:00)', '심야 (21:30~01:00)'],
+    officialWebcamUrl: 'https://golf.edenvalley.co.kr/Board/view.asp?location=04',
+  ),
 ];
 
 // -------------------------------------------------------------
-// 실시간 날씨 API 서비스 (Open-Meteo 무료 글로벌 날씨 연동)
+// 실시간 날씨 API 서비스 (Open-Meteo + wttr.in 듀얼 백업 고신뢰 연동)
 // -------------------------------------------------------------
 
 class WeatherService {
   static final Map<String, ResortWeather> _cache = {};
+  static final Map<String, DateTime> _cacheTime = {};
+  static bool _isOpenMeteoDegraded = false;
+  static DateTime? _lastOpenMeteoCheck;
 
-  static Future<ResortWeather?> fetchWeather(SkiResort resort) async {
+  static void clearCache() {
+    _cache.clear();
+    _cacheTime.clear();
+  }
+
+  static Future<ResortWeather?> fetchWeather(SkiResort resort, {bool forceRefresh = false}) async {
+    final now = DateTime.now();
+
+    // 1. 유효 캐시 확인 (15분 이내 유지)
+    if (!forceRefresh && _cache.containsKey(resort.id) && _cacheTime.containsKey(resort.id)) {
+      if (now.difference(_cacheTime[resort.id]!) < const Duration(minutes: 15)) {
+        return _cache[resort.id];
+      }
+    }
+
+    // 2. Open-Meteo 장애 상태 확인 (장애 감지 시 5분간 wttr.in 우선 사용)
+    bool tryOpenMeteo = true;
+    if (_isOpenMeteoDegraded && _lastOpenMeteoCheck != null) {
+      if (now.difference(_lastOpenMeteoCheck!) < const Duration(minutes: 5)) {
+        tryOpenMeteo = false;
+      }
+    }
+
+    if (tryOpenMeteo) {
+      final om = await _fetchFromOpenMeteo(resort);
+      if (om != null) {
+        _isOpenMeteoDegraded = false;
+        _cache[resort.id] = om;
+        _cacheTime[resort.id] = now;
+        return om;
+      } else {
+        _isOpenMeteoDegraded = true;
+        _lastOpenMeteoCheck = now;
+      }
+    }
+
+    // 3. Fallback: wttr.in 초고속 백업 엔진 호출
+    final wttr = await _fetchFromWttr(resort);
+    if (wttr != null) {
+      _cache[resort.id] = wttr;
+      _cacheTime[resort.id] = now;
+      return wttr;
+    }
+
+    // 4. 만약 둘 다 일시 실패했지만 기존 캐시가 있다면 이전 날씨 반환
     if (_cache.containsKey(resort.id)) {
       return _cache[resort.id];
     }
 
+    return null;
+  }
+
+  static Future<ResortWeather?> _fetchFromOpenMeteo(SkiResort resort) async {
     try {
       final url = Uri.parse(
         'https://api.open-meteo.com/v1/forecast?latitude=${resort.lat}&longitude=${resort.lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum&timezone=Asia%2FSeoul',
       );
-
-      final response = await http.get(url).timeout(const Duration(seconds: 4));
+      final response = await http.get(url).timeout(const Duration(milliseconds: 1800));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final weather = ResortWeather.fromJson(data);
-        _cache[resort.id] = weather;
-        return weather;
+        return ResortWeather.fromJson(data);
       }
-    } catch (_) {
-      // 네트워크 오프라인 또는 오류 시
-      return null;
-    }
+    } catch (_) {}
+    return null;
+  }
 
+  static Future<ResortWeather?> _fetchFromWttr(SkiResort resort) async {
+    try {
+      final url = Uri.parse(
+        'https://wttr.in/${resort.lat},${resort.lng}?format=j1',
+      );
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'eatSleepRide/1.1.1 (Flutter App)'},
+      ).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return ResortWeather.fromWttrJson(data);
+      }
+    } catch (_) {}
     return null;
   }
 }
@@ -1734,7 +2424,7 @@ class _MainScreenState extends State<MainScreen> {
     _startOrUpdateNotificationListener();
     gCurrentUserNotifier.addListener(_startOrUpdateNotificationListener);
 
-    // 🛡️ Apple Guideline 1.2: 앱 최초 실행 시 EULA 및 무관용(Zero-Tolerance) 원칙 명시적 동의 모달
+    // 🛡️ Apple Guideline 1.2: 앱 최초 실행 시 EULA 및 커뮤니티 클린 가이드라인 명시적 동의 모달
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstLaunchEulaConsent();
       _checkDailyAttendance();
@@ -1780,14 +2470,14 @@ class _MainScreenState extends State<MainScreen> {
                             Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18),
                             SizedBox(width: 6),
                             Text(
-                              '무관용 원칙 (Zero-Tolerance Policy)',
+                              '커뮤니티 클린 이용 수칙',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
                             ),
                           ],
                         ),
                         SizedBox(height: 6),
                         Text(
-                          '같이타요는 만 19세(18+) 성인 라이더 전용 커뮤니티입니다. 타인에 대한 욕설, 비방, 음란물, 불법 정보 게시 시 사전 경고 없이 즉각 삭제되며 해당 이용자는 영구 이용 정지(계정 차단) 조치됩니다.',
+                          '같이타요는 만 19세(18+) 성인 라이더 전용 커뮤니티입니다. 타인에 대한 욕설, 비방, 음란물, 불법 정보 게시 시 즉각 삭제되며 공정 검증을 거쳐 계정 이용에 제한이 있을 수 있습니다.',
                           style: TextStyle(fontSize: 11.5, color: Color(0xFF7F1D1D), height: 1.4),
                         ),
                       ],
@@ -1986,15 +2676,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadWeathers();
   }
 
-  Future<void> _loadWeathers() async {
-    for (final resort in kSkiResorts) {
-      final w = await WeatherService.fetchWeather(resort);
+  Future<void> _loadWeathers({bool forceRefresh = false}) async {
+    await Future.wait(kSkiResorts.map((resort) async {
+      final w = await WeatherService.fetchWeather(resort, forceRefresh: forceRefresh);
       if (w != null && mounted) {
         setState(() {
           _weathers[resort.id] = w;
         });
       }
-    }
+    }));
   }
 
   @override
@@ -2071,54 +2761,63 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              await _loadWeathers();
-              if (mounted) setState(() {});
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // -------------------------------------------------------
-                  // 0. ❄️ 실시간 설질 • LIVE 피드 카드
-                  // -------------------------------------------------------
-                  _buildLiveSnowConditionCard(),
-
-                  const SizedBox(height: 20),
-
-                  // -------------------------------------------------------
-                  // 1. ⚡️ 초고속 4인 랜덤 매칭 실시간 현황 & 원터치 진입 카드
-                  // -------------------------------------------------------
-                  _buildRandomMatchingLiveCard(),
-
-                  const SizedBox(height: 26),
-
-                  // -------------------------------------------------------
-                  // 2. 🏂 실시간 같이 타요 최신 등록 항목들
-                  // -------------------------------------------------------
-                  _buildRecentPostsSection(displayedRecentPosts),
-
-                  const SizedBox(height: 26),
-
-                  // -------------------------------------------------------
-                  // 3. ❄️ 주요 스키장 실시간 날씨 & 설질 현황
-                  // -------------------------------------------------------
-                  _buildResortWeatherSection(),
-
-                  const SizedBox(height: 24),
-
-                  // -------------------------------------------------------
-                  // 4. ✍️ 원터치 모집글 등록 배너
-                  // -------------------------------------------------------
-                  _buildWritePostBanner(),
-
-                  const SizedBox(height: 20),
-                ],
+          body: CustomScrollView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            slivers: [
+              CupertinoSliverRefreshControl(
+                refreshTriggerPullDistance: 60.0,
+                refreshIndicatorExtent: 45.0,
+                onRefresh: () async {
+                  unawaited(HapticFeedback.mediumImpact());
+                  await _loadWeathers(forceRefresh: true);
+                  if (mounted) setState(() {});
+                },
               ),
-            ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // -------------------------------------------------------
+                      // 0. ❄️ 실시간 설질 • LIVE 피드 카드
+                      // -------------------------------------------------------
+                      _buildLiveSnowConditionCard(),
+
+                      const SizedBox(height: 20),
+
+                      // -------------------------------------------------------
+                      // 1. ⚡️ 초고속 4인 랜덤 매칭 실시간 현황 & 원터치 진입 카드
+                      // -------------------------------------------------------
+                      _buildRandomMatchingLiveCard(),
+
+                      const SizedBox(height: 26),
+
+                      // -------------------------------------------------------
+                      // 2. 🏂 실시간 같이 타요 최신 등록 항목들
+                      // -------------------------------------------------------
+                      _buildRecentPostsSection(displayedRecentPosts),
+
+                      const SizedBox(height: 26),
+
+                      // -------------------------------------------------------
+                      // 3. ❄️ 주요 스키장 실시간 날씨 & 설질 현황
+                      // -------------------------------------------------------
+                      _buildResortWeatherSection(),
+
+                      const SizedBox(height: 24),
+
+                      // -------------------------------------------------------
+                      // 4. ✍️ 원터치 모집글 등록 배너
+                      // -------------------------------------------------------
+                      _buildWritePostBanner(),
+
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -2429,43 +3128,94 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                             ),
                             const SizedBox(width: 4),
-                            PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert, size: 16, color: Colors.grey),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              itemBuilder: (ctx) => [
-                                const PopupMenuItem(
-                                  value: 'hide',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.visibility_off_outlined, size: 15, color: Colors.black87),
-                                      SizedBox(width: 6),
-                                      Text('이 한줄평 피드에서 즉시 숨기기', style: TextStyle(fontSize: 12.5)),
-                                    ],
+                            if (comment.isMyComment)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.grey),
+                                tooltip: '한줄평 삭제',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      title: const Row(
+                                        children: [
+                                          Icon(Icons.delete_outline_rounded, color: Colors.red, size: 22),
+                                          SizedBox(width: 8),
+                                          Text('설질 한줄평 삭제', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                        ],
+                                      ),
+                                      content: const Text(
+                                        '작성하신 실시간 설질 한줄평을 삭제하시겠습니까?\n삭제된 한줄평은 복구할 수 없습니다.',
+                                        style: TextStyle(fontSize: 13.5, height: 1.45),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('취소', style: TextStyle(color: Colors.grey)),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            Navigator.pop(ctx);
+                                            if (comment.id.isNotEmpty) {
+                                              await AppFirebaseService.instance.deleteLiveSnowComment(comment.id);
+                                            }
+                                            if (!mounted) return;
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('설질 한줄평이 삭제되었습니다.'), backgroundColor: Colors.black87),
+                                            );
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red.shade600,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          ),
+                                          child: const Text('삭제하기'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              )
+                            else
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, size: 16, color: Colors.grey),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                itemBuilder: (ctx) => [
+                                  const PopupMenuItem(
+                                    value: 'hide',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.visibility_off_outlined, size: 15, color: Colors.black87),
+                                        SizedBox(width: 6),
+                                        Text('이 한줄평 피드에서 즉시 숨기기', style: TextStyle(fontSize: 12.5)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'report',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.flag_outlined, size: 15, color: Colors.orange),
-                                      SizedBox(width: 6),
-                                      Text('한줄평 신고하기 (24h 검토)', style: TextStyle(fontSize: 12.5)),
-                                    ],
+                                  const PopupMenuItem(
+                                    value: 'report',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.flag_outlined, size: 15, color: Colors.orange),
+                                        SizedBox(width: 6),
+                                        Text('한줄평 신고하기 (24h 검토)', style: TextStyle(fontSize: 12.5)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'block',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.block_rounded, size: 15, color: Colors.red),
-                                      SizedBox(width: 6),
-                                      Text('작성자 차단하기', style: TextStyle(fontSize: 12.5, color: Colors.red)),
-                                    ],
+                                  const PopupMenuItem(
+                                    value: 'block',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.block_rounded, size: 15, color: Colors.red),
+                                        SizedBox(width: 6),
+                                        Text('작성자 차단하기', style: TextStyle(fontSize: 12.5, color: Colors.red)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                              onSelected: (action) {
+                                ],
+                                onSelected: (action) {
                                 if (action == 'hide') {
                                   setState(() {
                                     hideContentPermanently(comment.id);
@@ -2484,8 +3234,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     context: context,
                                     targetType: '설질 한줄평',
                                     targetAuthor: comment.authorName,
+                                    targetUid: comment.authorUid,
+                                    targetId: comment.id,
+                                    contentSnippet: comment.content,
                                     currentReportCount: comment.reportCount,
-                                    onReportSuccess: (reason) {
+                                    onReportSuccess: (catId, catName, details) {
                                       setState(() {
                                         hideContentPermanently(comment.id);
                                         comment.reportedUserIds.add(currentUserId);
@@ -2494,10 +3247,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                           comment.isBlinded = true;
                                         }
                                       });
+                                      AppFirebaseService.instance.submitReport(
+                                        reporterUid: currentUserId,
+                                        reporterNickname: gCurrentUser?.nickname ?? '익명',
+                                        targetUid: comment.authorUid,
+                                        targetNickname: comment.authorName,
+                                        targetType: 'snow_comment',
+                                        targetId: comment.id,
+                                        category: catId,
+                                        categoryName: catName,
+                                        contentSnippet: comment.content,
+                                        additionalDetails: details,
+                                      );
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
                                           backgroundColor: Color(0xFF1E3A8A),
-                                          content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 조치)'),
+                                          content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. 공정 검증을 거쳐 이용 제한 조치가 적용됩니다.'),
                                         ),
                                       );
                                     },
@@ -2526,6 +3291,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showWriteLiveSnowCommentDialog() {
     if (!ensureUserLoggedIn(context, actionName: '설질 한줄평을 작성')) return;
+    if (checkUserSanctionAndAlert(context)) return;
 
     if (!AppFirebaseService.isSnowCommentWritable()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2598,7 +3364,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // 🛡️ Apple Guideline 1.2: 무관용 원칙 EULA 고지 배너
+                  // 🛡️ Apple Guideline 1.2: 클린 커뮤니티 EULA 고지 배너
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
@@ -2613,7 +3379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            '욕설, 비방, 허위 설질 작성 시 무관용 원칙(Zero-Tolerance)에 따라 24시간 이내 즉시 삭제 및 계정 이용 정지 조치됩니다.',
+                            '욕설, 비방, 허위 설질 작성 시 24시간 이내 즉시 삭제 및 계정 이용에 제한이 있을 수 있습니다.',
                             style: TextStyle(fontSize: 10.5, color: Color(0xFF991B1B), height: 1.35),
                           ),
                         ),
@@ -4141,25 +4907,40 @@ class _RidePostListViewState extends State<RidePostListView> {
             children: [
               _buildFilterHeader(),
               Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
-                    if (refreshed.isNotEmpty) {
-                      gRidePosts = refreshed;
-                    }
-                    await Future.delayed(const Duration(milliseconds: 300));
-                  },
-                  child: visiblePosts.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          itemCount: visiblePosts.length,
-                          itemBuilder: (context, index) {
-                            final post = visiblePosts[index];
-                            return _buildPostCard(post);
-                          },
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                  slivers: [
+                    CupertinoSliverRefreshControl(
+                      refreshTriggerPullDistance: 60.0,
+                      refreshIndicatorExtent: 45.0,
+                      onRefresh: () async {
+                        unawaited(HapticFeedback.mediumImpact());
+                        final refreshed = await AppFirebaseService.instance.getRidePostsOnce();
+                        if (refreshed.isNotEmpty) {
+                          gRidePosts = refreshed;
+                        }
+                        await Future.delayed(const Duration(milliseconds: 300));
+                      },
+                    ),
+                    if (visiblePosts.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyState(),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final post = visiblePosts[index];
+                              return _buildPostCard(post);
+                            },
+                            childCount: visiblePosts.length,
+                          ),
                         ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -4267,7 +5048,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                     ),
                   ),
                   const SizedBox(width: 5),
-                  if (post.isAuthor)
+                  if (post.isMyPost)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
@@ -4305,7 +5086,7 @@ class _RidePostListViewState extends State<RidePostListView> {
                       ],
                     ),
                   ),
-                  if (!post.isAuthor) ...[
+                  if (!post.isMyPost) ...[
                     const SizedBox(width: 1),
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
@@ -4368,8 +5149,11 @@ class _RidePostListViewState extends State<RidePostListView> {
                             context: context,
                             targetType: '모집글',
                             targetAuthor: post.authorName,
+                            targetUid: post.authorUid,
+                            targetId: post.id,
+                            contentSnippet: '${post.title}\n${post.content}',
                             currentReportCount: post.reportCount,
-                            onReportSuccess: (reason) {
+                            onReportSuccess: (catId, catName, details) {
                               setState(() {
                                 hideContentPermanently(post.id);
                                 post.reportCount += 1;
@@ -4378,13 +5162,22 @@ class _RidePostListViewState extends State<RidePostListView> {
                                   post.isBlinded = true;
                                 }
                               });
-                              if (post.id.isNotEmpty) {
-                                AppFirebaseService.instance.reportRidePost(post.id, currentUserId);
-                              }
+                              AppFirebaseService.instance.submitReport(
+                                reporterUid: currentUserId,
+                                reporterNickname: gCurrentUser?.nickname ?? '익명',
+                                targetUid: post.authorUid,
+                                targetNickname: post.authorName,
+                                targetType: 'gathering',
+                                targetId: post.id,
+                                category: catId,
+                                categoryName: catName,
+                                contentSnippet: '${post.title}\n${post.content}',
+                                additionalDetails: details,
+                              );
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   backgroundColor: Color(0xFF1E3A8A),
-                                  content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 영구 조치)'),
+                                  content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. 공정 검증을 거쳐 이용 제한 조치가 적용됩니다.'),
                                 ),
                               );
                             },
@@ -4494,6 +5287,13 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
 
   final List<String> _currentQueue = [];
 
+  // 🎯 맞춤 조건 매칭 상태 변수
+  bool _currentIsCustomMatch = false;
+  String _currentFilterDiscipline = '상관없음';
+  List<String> _currentFilterStyles = ['상관없음'];
+  List<String> _currentFilterLevels = ['상관없음'];
+  List<String> _currentFilterAgeGroups = ['상관없음'];
+
   @override
   void initState() {
     super.initState();
@@ -4510,7 +5310,8 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    loadMatchPenaltyState().then((_) {
+    loadMatchPenaltyState().then((_) async {
+      await loadDailyMatchCount();
       if (mounted) {
         _syncCooldownTimer();
         setState(() {});
@@ -4641,7 +5442,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '오늘의 4인 파티 매칭 기회(1회)를 모두 사용하셨습니다.',
+                        '오늘의 4인 파티 매칭 기회(2회)를 모두 사용하셨습니다.',
                         style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.red),
                       ),
                     ),
@@ -4650,24 +5451,8 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
               ),
               const SizedBox(height: 14),
               const Text(
-                '무분별한 매칭 방지와 진정성 있는 슬로프 만남을 위해 4인 슬로프 파티 매칭은 1일 1회로 제한됩니다.\n\n매일 자정(00:00)에 다시 충전됩니다.',
+                '무분별한 매칭 방지와 쾌적한 슬로프 만남을 위해 4인 슬로프 파티 매칭은 1일 2회로 운영됩니다.\n\n매일 자정(00:00)에 2회가 다시 충전됩니다.',
                 style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.45),
-              ),
-              const SizedBox(height: 14),
-              Center(
-                child: TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      gDailyRandomMatchRemaining = 1;
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('⚡️ [테스트용] 오늘의 매칭 기회가 1회 다시 충전되었습니다!')),
-                    );
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('테스트용 매칭 횟수 1회 리셋', style: TextStyle(fontSize: 12)),
-                ),
               ),
             ],
           ),
@@ -4764,8 +5549,519 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
     );
   }
 
-  void _startMatching() {
+  void _onMatchingButtonPressed() {
     if (!ensureUserLoggedIn(context, actionName: '4인 슬로프 파티')) return;
+    if (checkUserSanctionAndAlert(context)) return;
+
+    // 0. 🌙 새벽 03:00 ~ 06:00 슬로프 정설/휴장 시간 체크
+    final now = DateTime.now();
+    if (now.hour >= 3 && now.hour < 6) {
+      _showMidnightClosedDialog();
+      return;
+    }
+
+    // 0-1. ⏱️ '다음에 하기' 거절 페널티 (5분 매칭 제한) 검사
+    final remainingCooldown = getRemainingSkipCooldown();
+    if (remainingCooldown > Duration.zero) {
+      _syncCooldownTimer();
+      _showSkipCooldownDialog(remainingCooldown);
+      return;
+    }
+
+    if (gDailyRandomMatchRemaining <= 0) {
+      _showDailyLimitExceededDialog();
+      return;
+    }
+
+    _showMatchingModeSelectionSheet();
+  }
+
+  void _showMatchingModeSelectionSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.groups_rounded, color: Color(0xFF2563EB), size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '[${_selectedResort.shortName}] 파티 매칭 방식 선택',
+                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: -0.3),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '원하는 매칭 방식을 선택하세요',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // 1. 일반 매칭 카드
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _startMatching(isCustomMatch: false);
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.blue.shade200, width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    '일반 매칭',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2563EB),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text('빠른 매칭', style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '조건 없이 실시간 접속 중인 슬로프 라이더들과 가장 빠르게 4인 파티를 구성합니다.',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.3),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // 2. 조건 매칭 카드
+                InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showCustomConditionSheet();
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.purple.shade200, width: 1.2),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade600,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.tune_rounded, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    '조건 매칭',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade600,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text('취향/연령 필터', style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '종목, 라이딩 레벨, 연령대를 설정하여 나와 딱 맞는 메이트들을 찾습니다.',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.3),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCustomConditionSheet() {
+    String selectedDiscipline = '상관없음';
+    Set<String> selectedStyles = {'상관없음'};
+    Set<String> selectedLevels = {'상관없음'};
+    Set<String> selectedAgeGroups = {'상관없음'};
+
+    final disciplineOptions = ['상관없음', '보드', '스키'];
+    final boardStyleOptions = ['상관없음', '프리라이딩', '테크니컬라이딩', '그라운드트릭', '알파인'];
+    final skiStyleOptions = ['상관없음', '인터스키', '프리스키', '모글'];
+    final levelOptions = ['상관없음', '초급', '초중급', '중급', '상급'];
+    final ageOptions = ['상관없음', '20대', '30대', '40대'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 38,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.tune_rounded, color: Colors.purple.shade700, size: 24),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '맞춤 조건 매칭 설정',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: -0.3),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '원하는 메이트의 조건을 지정하세요',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 1. 종목 (단일 선택)
+                      const Text(
+                        '종목 (단일 선택)',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: disciplineOptions.map((disc) {
+                          final isSelected = selectedDiscipline == disc;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(
+                                disc == '스키' ? '스키 🎿' : (disc == '보드' ? '보드 🏂' : '상관없음'),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              selected: isSelected,
+                              selectedColor: const Color(0xFF2563EB),
+                              backgroundColor: Colors.grey.shade100,
+                              onSelected: (val) {
+                                if (val) {
+                                  setModalState(() {
+                                    selectedDiscipline = disc;
+                                    selectedStyles = {'상관없음'};
+                                  });
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                      // 1-1. 세부 종목 스타일 (보드: 덕스탠스, 테크니컬라이딩, 그라운드트릭 등 / 스키: 인터스키, 프리스키 등)
+                      if (selectedDiscipline != '상관없음') ...[
+                        const SizedBox(height: 18),
+                        Text(
+                          selectedDiscipline == '보드'
+                              ? '보드 세부 스타일 (다중 선택)'
+                              : '스키 세부 스타일 (다중 선택)',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: (selectedDiscipline == '보드' ? boardStyleOptions : skiStyleOptions).map((style) {
+                            final isSelected = selectedStyles.contains(style);
+                            return FilterChip(
+                              label: Text(
+                                style,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              selected: isSelected,
+                              selectedColor: const Color(0xFF2563EB),
+                              backgroundColor: Colors.grey.shade100,
+                              checkmarkColor: Colors.white,
+                              onSelected: (val) {
+                                setModalState(() {
+                                  if (style == '상관없음') {
+                                    selectedStyles = {'상관없음'};
+                                  } else {
+                                    selectedStyles.remove('상관없음');
+                                    if (val) {
+                                      selectedStyles.add(style);
+                                    } else {
+                                      selectedStyles.remove(style);
+                                    }
+                                    if (selectedStyles.isEmpty) {
+                                      selectedStyles.add('상관없음');
+                                    }
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+
+                      // 2. 라이딩 레벨 (다중 선택 가능)
+                      const Text(
+                        '라이딩 레벨 (다중 선택 가능)',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: levelOptions.map((lvl) {
+                          final isSelected = selectedLevels.contains(lvl);
+                          return FilterChip(
+                            label: Text(
+                              lvl,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: const Color(0xFF2563EB),
+                            backgroundColor: Colors.grey.shade100,
+                            checkmarkColor: Colors.white,
+                            onSelected: (val) {
+                              setModalState(() {
+                                if (lvl == '상관없음') {
+                                  selectedLevels = {'상관없음'};
+                                } else {
+                                  selectedLevels.remove('상관없음');
+                                  if (val) {
+                                    selectedLevels.add(lvl);
+                                  } else {
+                                    selectedLevels.remove(lvl);
+                                  }
+                                  if (selectedLevels.isEmpty) {
+                                    selectedLevels.add('상관없음');
+                                  }
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // 3. 연령대 (다중 선택 가능)
+                      const Text(
+                        '연령대 (다중 선택 가능)',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: ageOptions.map((age) {
+                          final isSelected = selectedAgeGroups.contains(age);
+                          return FilterChip(
+                            label: Text(
+                              age,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: Colors.purple.shade600,
+                            backgroundColor: Colors.grey.shade100,
+                            checkmarkColor: Colors.white,
+                            onSelected: (val) {
+                              setModalState(() {
+                                if (age == '상관없음') {
+                                  selectedAgeGroups = {'상관없음'};
+                                } else {
+                                  selectedAgeGroups.remove('상관없음');
+                                  if (val) {
+                                    selectedAgeGroups.add(age);
+                                  } else {
+                                    selectedAgeGroups.remove(age);
+                                  }
+                                  if (selectedAgeGroups.isEmpty) {
+                                    selectedAgeGroups.add('상관없음');
+                                  }
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 조건으로 매칭 시작 버튼
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _startMatching(
+                              isCustomMatch: true,
+                              filterDiscipline: selectedDiscipline,
+                              filterStyles: selectedStyles.toList(),
+                              filterLevels: selectedLevels.toList(),
+                              filterAgeGroups: selectedAgeGroups.toList(),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 2,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.tune_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                '[${_selectedResort.shortName}] 조건으로 매칭 시작',
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _startMatching({
+    bool isCustomMatch = false,
+    String filterDiscipline = '상관없음',
+    List<String> filterStyles = const ['상관없음'],
+    List<String> filterLevels = const ['상관없음'],
+    List<String> filterAgeGroups = const ['상관없음'],
+  }) {
+    if (!ensureUserLoggedIn(context, actionName: '4인 슬로프 파티')) return;
+    if (checkUserSanctionAndAlert(context)) return;
 
     // 0. 🌙 새벽 03:00 ~ 06:00 슬로프 정설/휴장 시간 체크
     final now = DateTime.now();
@@ -4794,6 +6090,11 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
       _isMatching = true;
       _matchedCount = 1;
       _elapsedSeconds = 0;
+      _currentIsCustomMatch = isCustomMatch;
+      _currentFilterDiscipline = filterDiscipline;
+      _currentFilterStyles = List.from(filterStyles);
+      _currentFilterLevels = List.from(filterLevels);
+      _currentFilterAgeGroups = List.from(filterAgeGroups);
       _currentQueue.clear();
       _currentQueue.add(currentUser.nickname);
     });
@@ -4826,6 +6127,14 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
       shortName: _selectedResort.shortName,
       uid: currentUser.id,
       nickname: currentUser.nickname,
+      discipline: currentUser.preferredDiscipline,
+      level: currentUser.level,
+      ageGroup: currentUser.ageGroup,
+      isCustomMatch: isCustomMatch,
+      filterDiscipline: filterDiscipline,
+      filterStyles: filterStyles,
+      filterLevels: filterLevels,
+      filterAgeGroups: filterAgeGroups,
     );
 
     // 2. 대기열 인원 실시간 구독
@@ -4896,6 +6205,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
           nickname: i < post.participantNames.length ? post.participantNames[i] : '라이더 $i',
           homeResort: post.resortName,
           level: '중급',
+          ageGroup: '20대',
           preferredDiscipline: '보드 🏂',
           provider: uid.startsWith('apple') ? SocialAuthProvider.apple : SocialAuthProvider.kakao,
         );
@@ -4950,18 +6260,28 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
+                    color: post.isCustomMatch ? Colors.purple.shade50 : Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade100),
+                    border: Border.all(color: post.isCustomMatch ? Colors.purple.shade200 : Colors.blue.shade100),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.downhill_skiing_rounded, color: Colors.blue.shade700, size: 16),
+                      Icon(
+                        post.isCustomMatch ? Icons.tune_rounded : Icons.downhill_skiing_rounded,
+                        color: post.isCustomMatch ? Colors.purple.shade700 : Colors.blue.shade700,
+                        size: 16,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '[${post.resortName}] 동일 스키장 실시간 동행 파티',
-                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                          post.isCustomMatch
+                              ? '[${post.resortName}] 맞춤 조건 파티 매칭 완료 🎯'
+                              : '[${post.resortName}] 동일 스키장 실시간 동행 파티',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: post.isCustomMatch ? Colors.purple.shade900 : Colors.blue.shade900,
+                          ),
                         ),
                       ),
                     ],
@@ -4978,6 +6298,9 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                 // 4인 라이더 프로필 카드 리스트 (소셜 인증 배지 제거)
                 ...participantsList.map((rider) {
                   final isMe = rider.id == currentUser.id;
+                  final bool showAgeBadge = post.isCustomMatch &&
+                      post.matchFilterAgeGroups.isNotEmpty &&
+                      !post.matchFilterAgeGroups.contains('상관없음');
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -5030,10 +6353,37 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                                   ],
                                 ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${rider.homeResort} • ${rider.preferredDiscipline} • ${rider.level}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              const SizedBox(height: 3),
+                              Wrap(
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.blue.shade200, width: 0.8),
+                                    ),
+                                    child: Text(
+                                      '${rider.preferredDiscipline} • ${rider.level}',
+                                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
+                                    ),
+                                  ),
+                                  if (showAgeBadge)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.purple.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.purple.shade200, width: 0.8),
+                                      ),
+                                      child: Text(
+                                        rider.ageGroup.isNotEmpty ? rider.ageGroup : '20대',
+                                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.purple.shade800),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ),
@@ -5105,10 +6455,9 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                     onPressed: () async {
                       Navigator.pop(ctx);
                       await clearPendingPartyAcceptance();
+                      await consumeMatchTicket();
                       if (!mounted) return;
-                      setState(() {
-                        gDailyRandomMatchRemaining = 0;
-                      });
+                      setState(() {});
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => ChatRoomScreen(post: post),
@@ -5284,7 +6633,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                       child: Text(
                         isInCooldown
                             ? '페널티 $cdMm:$cdSs ⏱️'
-                            : (hasTicket ? '1일 1회 가능 🟢' : '오늘 기회 소진 🔴'),
+                            : (hasTicket ? '1일 2회 가능 ($gDailyRandomMatchRemaining/2) 🟢' : '오늘 기회 소진 🔴'),
                         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -5366,7 +6715,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                           Text(
                             isInCooldown
                                 ? '⏱️ 매칭 제한 페널티 적용 중 ($cdMm:$cdSs 남음)'
-                                : (hasTicket ? '⚡️ 오늘 남은 매칭 기회: 1회' : '🔒 오늘 매칭 기회를 모두 사용했습니다'),
+                                : (hasTicket ? '⚡️ 오늘 남은 매칭 기회: $gDailyRandomMatchRemaining회' : '🔒 오늘 매칭 기회를 모두 사용했습니다'),
                             style: TextStyle(
                               fontSize: 12,
                               color: isInCooldown
@@ -5385,7 +6734,7 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _startMatching,
+                    onPressed: _onMatchingButtonPressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: (hasTicket && !isInCooldown) ? const Color(0xFF2563EB) : Colors.grey.shade400,
                       foregroundColor: Colors.white,
@@ -5403,8 +6752,8 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                             isInCooldown
                                 ? '매칭 제한 중 ($cdMm:$cdSs 후 재시도 가능)'
                                 : (hasTicket
-                                    ? '[${_selectedResort.shortName}] 4인 슬로프 파티 찾기 (1/1회)'
-                                    : '오늘의 1회 파티 매칭 완료됨 (내일 자정 초기화)'),
+                                    ? '[${_selectedResort.shortName}] 4인 슬로프 파티 찾기 ($gDailyRandomMatchRemaining/2회)'
+                                    : '오늘의 2회 파티 매칭 완료됨 (내일 자정 초기화)'),
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -5559,6 +6908,28 @@ class _RandomMatchingViewState extends State<RandomMatchingView> with SingleTick
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF2563EB),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _currentIsCustomMatch ? Colors.purple.shade50 : Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _currentIsCustomMatch ? Colors.purple.shade200 : Colors.blue.shade200,
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              _currentIsCustomMatch
+                  ? '🎯 맞춤 조건: $_currentFilterDiscipline${_currentFilterStyles.contains("상관없음") ? "" : "(${_currentFilterStyles.join("/")})"} • ${_currentFilterLevels.join(", ")} • ${_currentFilterAgeGroups.join(", ")}'
+                  : '⚡ 일반 빠른 매칭 모드',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: _currentIsCustomMatch ? Colors.purple.shade800 : Colors.blue.shade800,
               ),
             ),
           ),
@@ -5981,43 +7352,97 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'hide',
-                      child: Row(
-                        children: [
-                          Icon(Icons.visibility_off_outlined, size: 16, color: Colors.black87),
-                          SizedBox(width: 8),
-                          Text('이 후기 피드에서 즉시 숨기기', style: TextStyle(fontSize: 13)),
-                        ],
+                if (review.isMyReview)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.grey),
+                    tooltip: '후기 삭제',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          title: const Row(
+                            children: [
+                              Icon(Icons.delete_outline_rounded, color: Colors.red, size: 22),
+                              SizedBox(width: 8),
+                              Text('후기 삭제', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                            ],
+                          ),
+                          content: const Text(
+                            '작성하신 슬로프 후기를 삭제하시겠습니까?\n삭제된 후기는 복구할 수 없습니다.',
+                            style: TextStyle(fontSize: 13.5, height: 1.45),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('취소', style: TextStyle(color: Colors.grey)),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                if (review.id.isNotEmpty) {
+                                  await AppFirebaseService.instance.deleteRideReview(review.id);
+                                }
+                                setState(() {
+                                  gRideReviews.removeWhere((r) => r.id == review.id);
+                                });
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('후기가 삭제되었습니다.'), backgroundColor: Colors.black87),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade600,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: const Text('삭제하기'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  )
+                else
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'hide',
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility_off_outlined, size: 16, color: Colors.black87),
+                            SizedBox(width: 8),
+                            Text('이 후기 피드에서 즉시 숨기기', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'report',
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag_outlined, size: 16, color: Colors.orange),
-                          SizedBox(width: 8),
-                          Text('후기 신고하기 (24h 검토)', style: TextStyle(fontSize: 13)),
-                        ],
+                      const PopupMenuItem(
+                        value: 'report',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag_outlined, size: 16, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Text('후기 신고하기 (24h 검토)', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'block',
-                      child: Row(
-                        children: [
-                          Icon(Icons.block_rounded, size: 16, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('작성자 차단하기', style: TextStyle(fontSize: 13, color: Colors.red)),
-                        ],
+                      const PopupMenuItem(
+                        value: 'block',
+                        child: Row(
+                          children: [
+                            Icon(Icons.block_rounded, size: 16, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('작성자 차단하기', style: TextStyle(fontSize: 13, color: Colors.red)),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                  onSelected: (val) {
+                    ],
+                    onSelected: (val) {
                     if (val == 'hide') {
                       setState(() {
                         hideContentPermanently(review.id);
@@ -6043,8 +7468,11 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                         context: context,
                         targetType: '후기',
                         targetAuthor: review.authorName,
+                        targetUid: review.authorUid,
+                        targetId: review.id,
+                        contentSnippet: review.content,
                         currentReportCount: review.reportCount,
-                        onReportSuccess: (reason) {
+                        onReportSuccess: (catId, catName, details) {
                           setState(() {
                             hideContentPermanently(review.id);
                             review.reportCount += 1;
@@ -6054,15 +7482,23 @@ class _RideReviewListViewState extends State<RideReviewListView> {
                             }
                           });
 
-                          // 🚨 Firestore 실시간 신고 및 3회 자동 블라인드 저장
-                          if (review.id.isNotEmpty) {
-                            AppFirebaseService.instance.reportReview(review.id, currentUserId);
-                          }
+                          AppFirebaseService.instance.submitReport(
+                            reporterUid: currentUserId,
+                            reporterNickname: gCurrentUser?.nickname ?? '익명',
+                            targetUid: review.authorUid,
+                            targetNickname: review.authorName,
+                            targetType: 'review',
+                            targetId: review.id,
+                            category: catId,
+                            categoryName: catName,
+                            contentSnippet: review.content,
+                            additionalDetails: details,
+                          );
 
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               backgroundColor: Color(0xFF1E3A8A),
-                              content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 영구 조치)'),
+                              content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. 공정 검증을 거쳐 이용 제한 조치가 적용됩니다.'),
                             ),
                           );
                         },
@@ -6544,7 +7980,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🛡️ Apple Guideline 1.2: 안전 수칙 및 무관용(Zero-Tolerance) 원칙 고지 카드
+            // 🛡️ Apple Guideline 1.2: 안전 수칙 및 클린 커뮤니티 가이드라인 고지 카드
             Container(
               margin: const EdgeInsets.only(bottom: 20),
               padding: const EdgeInsets.all(12),
@@ -6561,7 +7997,7 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
                       Icon(Icons.shield_rounded, color: Color(0xFFDC2626), size: 18),
                       SizedBox(width: 6),
                       Text(
-                        '커뮤니티 안전 정책 및 무관용(Zero-Tolerance) 원칙',
+                        '커뮤니티 안전 가이드라인 및 이용 수칙',
                         style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
                       ),
                     ],
@@ -6569,8 +8005,8 @@ class _WriteRideReviewScreenState extends State<WriteRideReviewScreen> {
                   const SizedBox(height: 6),
                   const Text(
                     '• 본 서비스는 만 19세(18+) 이상 성인 라이더 전용 커뮤니티입니다.\n'
-                    '• 부적절한 후기 및 음란/선정적 사진 등록 시 사전 경고 없이 즉각 삭제 처리됩니다.\n'
-                    '• 악성 이용자는 무관용 원칙에 따라 24시간 이내 영구 퇴출(계정 이용 정지) 조치됩니다.\n'
+                    '• 부적절한 후기 및 음란/선정적 사진 등록 시 즉각 삭제 처리될 수 있습니다.\n'
+                    '• 이용 규정을 위반하는 경우 계정 이용에 제한이 있을 수 있습니다.\n'
                     '• 후기 등록 시 서비스 이용약관(EULA)에 동의한 것으로 간주됩니다.',
                     style: TextStyle(fontSize: 11, color: Color(0xFF7F1D1D), height: 1.4),
                   ),
@@ -6828,15 +8264,15 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
     _loadAllWeathers();
   }
 
-  void _loadAllWeathers() async {
-    for (final resort in kSkiResorts) {
-      final w = await WeatherService.fetchWeather(resort);
+  void _loadAllWeathers({bool forceRefresh = false}) async {
+    await Future.wait(kSkiResorts.map((resort) async {
+      final w = await WeatherService.fetchWeather(resort, forceRefresh: forceRefresh);
       if (w != null && mounted) {
         setState(() {
           _weathers[resort.id] = w;
         });
       }
-    }
+    }));
   }
 
   Future<void> _launchOfficialWebcamUrl(BuildContext context, SkiResort resort) async {
@@ -6920,10 +8356,11 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                     borderRadius: BorderRadius.circular(12),
                     child: InteractiveViewer(
                       minScale: 0.5,
-                      maxScale: 5.0,
+                      maxScale: 6.0,
                       child: Image.asset(
                         resort.trailMapAsset,
                         fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
                       ),
                     ),
                   ),
@@ -7237,6 +8674,7 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                             Image.asset(
                               resort.trailMapAsset,
                               fit: BoxFit.contain,
+                              filterQuality: FilterQuality.high,
                             ),
                             Positioned(
                               right: 8,
@@ -7425,7 +8863,7 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: '날씨 정보 새로고침',
             onPressed: () {
-              _loadAllWeathers();
+              _loadAllWeathers(forceRefresh: true);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('전체 스키장 실시간 날씨를 갱신했습니다.')),
               );
@@ -7535,7 +8973,7 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
               ),
               const SizedBox(height: 6),
 
-              // CCTV & 슬로프 배지
+              // 웹캠 & 슬로프 배지
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -7548,8 +8986,8 @@ class _ResortInfoScreenState extends State<ResortInfoScreen> {
                     child: const Row(
                       children: [
                         Icon(Icons.videocam, size: 10, color: Colors.red),
-                        SizedBox(width: 1),
-                        Text('CCTV', style: TextStyle(fontSize: 9, color: Colors.red, fontWeight: FontWeight.bold)),
+                        SizedBox(width: 2),
+                        Text('웹캠', style: TextStyle(fontSize: 9, color: Colors.red, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -7613,6 +9051,7 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
 
   Future<void> _submitComment() async {
     if (!ensureUserLoggedIn(context, actionName: '설질 한줄평을 등록')) return;
+    if (checkUserSanctionAndAlert(context)) return;
 
     if (!AppFirebaseService.isSnowCommentWritable()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -7958,7 +9397,7 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                     ),
                     const SizedBox(height: 10),
 
-                    // 🛡️ Apple Guideline 1.2: 무관용 원칙 EULA 고지 배너
+                    // 🛡️ Apple Guideline 1.2: 클린 커뮤니티 EULA 고지 배너
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -7973,7 +9412,7 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                           SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              '욕설, 비방, 허위 설질 작성 시 무관용 원칙(Zero-Tolerance)에 따라 24시간 이내 즉시 삭제 및 계정 이용 정지 조치됩니다.',
+                              '욕설, 비방, 허위 설질 작성 시 24시간 이내 즉시 삭제 및 계정 이용에 제한이 있을 수 있습니다.',
                               style: TextStyle(fontSize: 10.5, color: Color(0xFF991B1B), height: 1.35),
                             ),
                           ),
@@ -8122,43 +9561,94 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              PopupMenuButton<String>(
-                                icon: const Icon(Icons.more_vert, size: 16, color: Colors.grey),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                itemBuilder: (ctx) => [
-                                  const PopupMenuItem(
-                                    value: 'hide',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.visibility_off_outlined, size: 15, color: Colors.black87),
-                                        SizedBox(width: 6),
-                                        Text('이 한줄평 피드에서 즉시 숨기기', style: TextStyle(fontSize: 12.5)),
-                                      ],
+                              if (c.isMyComment)
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.grey),
+                                  tooltip: '한줄평 삭제',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                        title: const Row(
+                                          children: [
+                                            Icon(Icons.delete_outline_rounded, color: Colors.red, size: 22),
+                                            SizedBox(width: 8),
+                                            Text('설질 한줄평 삭제', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                          ],
+                                        ),
+                                        content: const Text(
+                                          '작성하신 실시간 설질 한줄평을 삭제하시겠습니까?\n삭제된 한줄평은 복구할 수 없습니다.',
+                                          style: TextStyle(fontSize: 13.5, height: 1.45),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(ctx),
+                                            child: const Text('취소', style: TextStyle(color: Colors.grey)),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () async {
+                                              Navigator.pop(ctx);
+                                              if (c.id.isNotEmpty) {
+                                                await AppFirebaseService.instance.deleteLiveSnowComment(c.id);
+                                              }
+                                              if (!mounted) return;
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('설질 한줄평이 삭제되었습니다.'), backgroundColor: Colors.black87),
+                                              );
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red.shade600,
+                                              foregroundColor: Colors.white,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                            ),
+                                            child: const Text('삭제하기'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                )
+                              else
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 16, color: Colors.grey),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  itemBuilder: (ctx) => [
+                                    const PopupMenuItem(
+                                      value: 'hide',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.visibility_off_outlined, size: 15, color: Colors.black87),
+                                          SizedBox(width: 6),
+                                          Text('이 한줄평 피드에서 즉시 숨기기', style: TextStyle(fontSize: 12.5)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'report',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.flag_outlined, size: 15, color: Colors.orange),
-                                        SizedBox(width: 6),
-                                        Text('한줄평 신고하기 (24h 검토)', style: TextStyle(fontSize: 12.5)),
-                                      ],
+                                    const PopupMenuItem(
+                                      value: 'report',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.flag_outlined, size: 15, color: Colors.orange),
+                                          SizedBox(width: 6),
+                                          Text('한줄평 신고하기 (24h 검토)', style: TextStyle(fontSize: 12.5)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: 'block',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.block_rounded, size: 15, color: Colors.red),
-                                        SizedBox(width: 6),
-                                        Text('작성자 차단하기', style: TextStyle(fontSize: 12.5, color: Colors.red)),
-                                      ],
+                                    const PopupMenuItem(
+                                      value: 'block',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.block_rounded, size: 15, color: Colors.red),
+                                          SizedBox(width: 6),
+                                          Text('작성자 차단하기', style: TextStyle(fontSize: 12.5, color: Colors.red)),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
-                                onSelected: (action) {
+                                  ],
+                                  onSelected: (action) {
                                   if (action == 'hide') {
                                     setState(() {
                                       hideContentPermanently(c.id);
@@ -8177,8 +9667,11 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                                       context: context,
                                       targetType: '설질 한줄평',
                                       targetAuthor: c.authorName,
+                                      targetUid: c.authorUid,
+                                      targetId: c.id,
+                                      contentSnippet: c.content,
                                       currentReportCount: c.reportCount,
-                                      onReportSuccess: (reason) {
+                                      onReportSuccess: (catId, catName, details) {
                                         setState(() {
                                           hideContentPermanently(c.id);
                                           c.reportedUserIds.add(currentUserId);
@@ -8187,10 +9680,22 @@ class _ResortLiveSnowReviewSectionState extends State<ResortLiveSnowReviewSectio
                                             c.isBlinded = true;
                                           }
                                         });
+                                        AppFirebaseService.instance.submitReport(
+                                          reporterUid: currentUserId,
+                                          reporterNickname: gCurrentUser?.nickname ?? '익명',
+                                          targetUid: c.authorUid,
+                                          targetNickname: c.authorName,
+                                          targetType: 'snow_comment',
+                                          targetId: c.id,
+                                          category: catId,
+                                          categoryName: catName,
+                                          contentSnippet: c.content,
+                                          additionalDetails: details,
+                                        );
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(
                                             backgroundColor: Color(0xFF1E3A8A),
-                                            content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. (24시간 이내 관리자 검토 후 조치)'),
+                                            content: Text('🚨 신고가 접수되어 피드에서 즉시 숨김 처리되었습니다. 공정 검증을 거쳐 이용 제한 조치가 적용됩니다.'),
                                           ),
                                         );
                                       },
@@ -8389,12 +9894,19 @@ class _DetailedSlopeStatusWidgetState extends State<DetailedSlopeStatusWidget> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Row(
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             if (slope.length.isNotEmpty) ...[
                               Icon(Icons.straighten_rounded, size: 13, color: Colors.grey.shade500),
                               const SizedBox(width: 3),
                               Text(slope.length, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                              Text('  •  ', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+                            ],
+                            if (slope.slopeDegree.isNotEmpty) ...[
+                              Icon(Icons.trending_up_rounded, size: 13, color: Colors.grey.shade600),
+                              const SizedBox(width: 3),
+                              Text('평균경사 ${slope.slopeDegree}', style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
                               Text('  •  ', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
                             ],
                             Icon(Icons.location_on_outlined, size: 13, color: Colors.grey.shade500),
@@ -9429,70 +10941,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           body: user == null
               ? _buildLoggedOutView()
-              : RefreshIndicator(
-                  color: const Color(0xFF2563EB),
-                  onRefresh: () async {
-                    if (gCurrentUser != null) {
-                      await AppFirebaseService.instance.refreshUserProfile(gCurrentUser!.id);
-                      if (mounted) setState(() {});
-                    }
-                  },
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 1. 소셜 로그인 계정 프로필 카드
-                        _buildProfileCard(user),
-
-                        const SizedBox(height: 24),
-
-                        // 2. 나의 슬로프 활동 지표 대시보드
-                        _buildSectionTitle('나의 슬로프 활동 지표 🏆'),
-                        const SizedBox(height: 8),
-                        _buildActivityDashboardCard(user),
-
-                        const SizedBox(height: 24),
-
-                        // 3. 나의 슬로프 배지 보관함
-                        _buildSectionTitle('슬로프 배지 보관함 🎖️'),
-                        const SizedBox(height: 8),
-                        _buildBadgeCollectionCard(user),
-
-                        const SizedBox(height: 24),
-
-                        // 4. 나의 라이딩 성향 설정
-                        _buildSectionTitle('나의 라이딩 설정 🏂'),
-                        const SizedBox(height: 8),
-                        _buildRidingPreferenceCard(user),
-
-                        const SizedBox(height: 24),
-
-                        // 5. 알림 및 보안 센터
-                        _buildSectionTitle('알림 & 익명성 보안 🔒'),
-                        const SizedBox(height: 8),
-                        _buildSecurityCard(),
-
-                        const SizedBox(height: 24),
-
-                        // 6. 계정 관리
-                        _buildSectionTitle('계정 관리'),
-                        const SizedBox(height: 8),
-                        _buildAccountCard(user),
-
-                        const SizedBox(height: 30),
-                        Center(
-                          child: Text(
-                            '같이타요 v1.0.0 • 26/27 시즌\n카카오 • Apple 공식 OAuth 연동',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+              : CustomScrollView(
+                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                  slivers: [
+                    CupertinoSliverRefreshControl(
+                      refreshTriggerPullDistance: 60.0,
+                      refreshIndicatorExtent: 45.0,
+                      onRefresh: () async {
+                        unawaited(HapticFeedback.mediumImpact());
+                        if (gCurrentUser != null) {
+                          await AppFirebaseService.instance.refreshUserProfile(gCurrentUser!.id);
+                          if (mounted) setState(() {});
+                        }
+                      },
                     ),
-                  ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1. 소셜 로그인 계정 프로필 카드
+                            _buildProfileCard(user),
+
+                            const SizedBox(height: 24),
+
+                            // 2. 나의 슬로프 활동 지표 대시보드
+                            _buildSectionTitle('나의 슬로프 활동 지표 🏆'),
+                            const SizedBox(height: 8),
+                            _buildActivityDashboardCard(user),
+
+                            const SizedBox(height: 24),
+
+                            // 3. 나의 슬로프 배지 보관함
+                            _buildSectionTitle('슬로프 배지 보관함 🎖️'),
+                            const SizedBox(height: 8),
+                            _buildBadgeCollectionCard(user),
+
+                            const SizedBox(height: 24),
+
+                            // 4. 나의 라이딩 성향 설정
+                            _buildSectionTitle('나의 라이딩 설정 🏂'),
+                            const SizedBox(height: 8),
+                            _buildRidingPreferenceCard(user),
+
+                            const SizedBox(height: 24),
+
+                            // 5. 알림 및 보안 센터
+                            _buildSectionTitle('알림 & 익명성 보안 🔒'),
+                            const SizedBox(height: 8),
+                            _buildSecurityCard(),
+
+                            const SizedBox(height: 24),
+
+                            // 6. 계정 관리
+                            _buildSectionTitle('계정 관리'),
+                            const SizedBox(height: 8),
+                            _buildAccountCard(user),
+
+                            const SizedBox(height: 30),
+                            Center(
+                              child: Text(
+                                '같이타요 v1.1.1 • 26/27 시즌\n카카오 • Apple 공식 OAuth 연동',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade400, height: 1.4),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         );
       },
@@ -10040,6 +11560,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
           ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: const Icon(Icons.cake_rounded, color: Color(0xFF2563EB)),
+            title: const Text('연령대', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+            trailing: DropdownButton<String>(
+              value: ['20대', '30대', '40대'].contains(user.ageGroup) ? user.ageGroup : '20대',
+              underline: const SizedBox(),
+              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF2563EB)),
+              style: const TextStyle(fontSize: 13.5, color: Color(0xFF2563EB), fontWeight: FontWeight.bold),
+              items: const [
+                DropdownMenuItem(value: '20대', child: Text('20대')),
+                DropdownMenuItem(value: '30대', child: Text('30대')),
+                DropdownMenuItem(value: '40대', child: Text('40대')),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    user.ageGroup = val;
+                  });
+                  AppFirebaseService.instance.saveUserProfile(user);
+                }
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -10144,7 +11688,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             secondary: const Icon(Icons.bolt_rounded, color: Colors.amber),
             title: const Text('4인 슬로프 파티 성공 알림', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-            subtitle: const Text('매칭 성사 시 푸시 알림 수신', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+            subtitle: const Text('파티 성사 시 실시간 푸시 알림 수신', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
             value: _matchNotification,
             activeThumbColor: const Color(0xFF2563EB),
             onChanged: (val) => setState(() => _matchNotification = val),
@@ -10162,7 +11706,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             secondary: const Icon(Icons.card_giftcard_rounded, color: Color(0xFFE11D48)),
             title: const Text('시즌 이벤트 및 혜택 알림 (선택)', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-            subtitle: const Text('크리스마스/시즌 특별 매칭 및 게릴라 이벤트 푸시 수신', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
+            subtitle: const Text('이벤트 푸시 수신', style: TextStyle(fontSize: 11.5, color: Colors.grey)),
             value: _eventNotification,
             activeThumbColor: const Color(0xFF2563EB),
             onChanged: (val) async {
@@ -11152,7 +12696,7 @@ class _RidePostDetailScreenState extends State<RidePostDetailScreen> {
                     targetType: '모집글',
                     targetAuthor: post.authorName,
                     currentReportCount: post.reportCount,
-                    onReportSuccess: (reason) {
+                    onReportSuccess: (catId, catName, details) {
                       setState(() {
                         hideContentPermanently(post.id);
                         post.reportCount += 1;

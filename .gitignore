@@ -68,3 +68,10 @@ functions/node_modules/
 *.mp4
 *.m4v
 test.mov
+
+# Release build binaries
+releases/**/*.apk
+releases/**/*.aab
+releases/**/*.ipa
+releases/**/*.xcarchive
+releases/**/*.zip

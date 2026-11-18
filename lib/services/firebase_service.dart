@@ -103,6 +103,7 @@ class AppFirebaseService {
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
+        ageGroup: '20대',
         joinedAt: DateTime.now(),
         completedRidesCount: 0,
         taggedReviewsCount: 0,
@@ -177,6 +178,7 @@ class AppFirebaseService {
         preferredDiscipline: '스노보드',
         homeResort: '비발디파크',
         level: '초중급',
+        ageGroup: '20대',
         joinedAt: DateTime.now(),
         completedRidesCount: 0,
         taggedReviewsCount: 0,
@@ -243,6 +245,7 @@ class AppFirebaseService {
         preferredDiscipline: '스노보드',
         homeResort: '휘닉스파크',
         level: '중급',
+        ageGroup: '20대',
         joinedAt: DateTime.now(),
         completedRidesCount: 0,
         taggedReviewsCount: 0,
@@ -317,6 +320,7 @@ class AppFirebaseService {
           preferredDiscipline: data['preferredDiscipline'] ?? '스노보드',
           homeResort: data['homeResort'] ?? '비발디파크',
           level: data['level'] ?? '초중급',
+          ageGroup: data['ageGroup'] ?? '20대',
           joinedAt: (data['joinedAt'] is Timestamp)
               ? (data['joinedAt'] as Timestamp).toDate()
               : DateTime.now(),
@@ -337,6 +341,12 @@ class AppFirebaseService {
           lastAttendanceDate: (data['lastAttendanceDate'] is Timestamp)
               ? (data['lastAttendanceDate'] as Timestamp).toDate()
               : null,
+          sanctionCount: data['sanctionCount'] ?? 0,
+          sanctionUntil: (data['sanctionUntil'] is Timestamp)
+              ? (data['sanctionUntil'] as Timestamp).toDate()
+              : null,
+          isPermanentlyBanned: data['isPermanentlyBanned'] ?? false,
+          sanctionReason: data['sanctionReason'],
         );
       }
     } catch (e) {
@@ -435,6 +445,13 @@ class AppFirebaseService {
           gCurrentUser!.homeResort = data['homeResort'] ?? gCurrentUser!.homeResort;
           gCurrentUser!.preferredDiscipline = data['preferredDiscipline'] ?? gCurrentUser!.preferredDiscipline;
           gCurrentUser!.level = data['level'] ?? gCurrentUser!.level;
+          gCurrentUser!.ageGroup = data['ageGroup'] ?? gCurrentUser!.ageGroup;
+          gCurrentUser!.sanctionCount = data['sanctionCount'] ?? gCurrentUser!.sanctionCount;
+          gCurrentUser!.sanctionUntil = (data['sanctionUntil'] is Timestamp)
+              ? (data['sanctionUntil'] as Timestamp).toDate()
+              : gCurrentUser!.sanctionUntil;
+          gCurrentUser!.isPermanentlyBanned = data['isPermanentlyBanned'] ?? gCurrentUser!.isPermanentlyBanned;
+          gCurrentUser!.sanctionReason = data['sanctionReason'] ?? gCurrentUser!.sanctionReason;
           gCurrentUser!.snowPoints = data['snowPoints'] ?? gCurrentUser!.snowPoints;
           gCurrentUser!.completedRidesCount = data['completedRidesCount'] ?? gCurrentUser!.completedRidesCount;
           gCurrentUser!.taggedReviewsCount = data['taggedReviewsCount'] ?? gCurrentUser!.taggedReviewsCount;
@@ -468,6 +485,13 @@ class AppFirebaseService {
           gCurrentUser!.homeResort = data['homeResort'] ?? gCurrentUser!.homeResort;
           gCurrentUser!.preferredDiscipline = data['preferredDiscipline'] ?? gCurrentUser!.preferredDiscipline;
           gCurrentUser!.level = data['level'] ?? gCurrentUser!.level;
+          gCurrentUser!.ageGroup = data['ageGroup'] ?? gCurrentUser!.ageGroup;
+          gCurrentUser!.sanctionCount = data['sanctionCount'] ?? gCurrentUser!.sanctionCount;
+          gCurrentUser!.sanctionUntil = (data['sanctionUntil'] is Timestamp)
+              ? (data['sanctionUntil'] as Timestamp).toDate()
+              : gCurrentUser!.sanctionUntil;
+          gCurrentUser!.isPermanentlyBanned = data['isPermanentlyBanned'] ?? gCurrentUser!.isPermanentlyBanned;
+          gCurrentUser!.sanctionReason = data['sanctionReason'] ?? gCurrentUser!.sanctionReason;
           gCurrentUser!.snowPoints = data['snowPoints'] ?? gCurrentUser!.snowPoints;
           gCurrentUser!.completedRidesCount = data['completedRidesCount'] ?? gCurrentUser!.completedRidesCount;
           gCurrentUser!.taggedReviewsCount = data['taggedReviewsCount'] ?? gCurrentUser!.taggedReviewsCount;
@@ -532,6 +556,7 @@ class AppFirebaseService {
         'preferredDiscipline': profile.preferredDiscipline,
         'homeResort': profile.homeResort,
         'level': profile.level,
+        'ageGroup': profile.ageGroup,
         'joinedAt': Timestamp.fromDate(profile.joinedAt),
         'completedRidesCount': profile.completedRidesCount,
         'taggedReviewsCount': profile.taggedReviewsCount,
@@ -542,6 +567,10 @@ class AppFirebaseService {
         'eventConsentDate': profile.eventConsentDate != null ? Timestamp.fromDate(profile.eventConsentDate!) : null,
         'lastSnowPointDate': profile.lastSnowPointDate != null ? Timestamp.fromDate(profile.lastSnowPointDate!) : null,
         'lastAttendanceDate': profile.lastAttendanceDate != null ? Timestamp.fromDate(profile.lastAttendanceDate!) : null,
+        'sanctionCount': profile.sanctionCount,
+        'sanctionUntil': profile.sanctionUntil != null ? Timestamp.fromDate(profile.sanctionUntil!) : null,
+        'isPermanentlyBanned': profile.isPermanentlyBanned,
+        'sanctionReason': profile.sanctionReason,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -665,6 +694,8 @@ class AppFirebaseService {
           isAnonymous: isAnonymous,
           hasMemberLeft: hasMemberLeft,
           needsRefill: data['needsRefill'] as bool? ?? false,
+          isCustomMatch: data['isCustomMatch'] as bool? ?? false,
+          matchFilterAgeGroups: List<String>.from(data['matchFilterAgeGroups'] ?? []),
           chatMessages: [],
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
@@ -725,6 +756,8 @@ class AppFirebaseService {
           isAnonymous: isAnonymous,
           hasMemberLeft: hasMemberLeft,
           needsRefill: data['needsRefill'] as bool? ?? false,
+          isCustomMatch: data['isCustomMatch'] as bool? ?? false,
+          matchFilterAgeGroups: List<String>.from(data['matchFilterAgeGroups'] ?? []),
           chatMessages: [],
           reportCount: data['reportCount'] ?? 0,
           isBlinded: data['isBlinded'] ?? false,
@@ -824,6 +857,8 @@ class AppFirebaseService {
         'isAnonymous': post.isAnonymous,
         'hasMemberLeft': post.hasMemberLeft,
         'needsRefill': post.needsRefill,
+        'isCustomMatch': post.isCustomMatch,
+        'matchFilterAgeGroups': post.matchFilterAgeGroups,
         'reportCount': 0,
         'isBlinded': false,
         'reportedUserIds': [],
@@ -1010,12 +1045,77 @@ class AppFirebaseService {
     }
   }
 
+  bool _areRidersCompatible(Map<String, dynamic> a, Map<String, dynamic> b) {
+    // 1. a의 필터 조건이 b에게 부합하는가?
+    final aFilterDisc = (a['filterDiscipline'] as String?) ?? '상관없음';
+    final bDisc = (b['discipline'] as String?) ?? '';
+    if (aFilterDisc != '상관없음') {
+      if (aFilterDisc == '스키' && !bDisc.contains('스키')) return false;
+      if (aFilterDisc == '보드' && !bDisc.contains('보드')) return false;
+    }
+
+    final aFilterLevels = List<String>.from(a['filterLevels'] ?? ['상관없음']);
+    final bLevel = (b['level'] as String?) ?? '중급';
+    if (!aFilterLevels.contains('상관없음') && !aFilterLevels.contains(bLevel)) {
+      return false;
+    }
+
+    final aFilterStyles = List<String>.from(a['filterStyles'] ?? ['상관없음']);
+    final bStyle = (b['style'] as String?) ?? '';
+    if (!aFilterStyles.contains('상관없음') && bStyle.isNotEmpty && !aFilterStyles.contains(bStyle)) {
+      return false;
+    }
+
+    final aFilterAges = List<String>.from(a['filterAgeGroups'] ?? ['상관없음']);
+    final bAge = (b['ageGroup'] as String?) ?? '20대';
+    if (!aFilterAges.contains('상관없음') && !aFilterAges.contains(bAge)) {
+      return false;
+    }
+
+    // 2. b의 필터 조건이 a에게 부합하는가?
+    final bFilterDisc = (b['filterDiscipline'] as String?) ?? '상관없음';
+    final aDisc = (a['discipline'] as String?) ?? '';
+    if (bFilterDisc != '상관없음') {
+      if (bFilterDisc == '스키' && !aDisc.contains('스키')) return false;
+      if (bFilterDisc == '보드' && !aDisc.contains('보드')) return false;
+    }
+
+    final bFilterLevels = List<String>.from(b['filterLevels'] ?? ['상관없음']);
+    final aLevel = (a['level'] as String?) ?? '중급';
+    if (!bFilterLevels.contains('상관없음') && !bFilterLevels.contains(aLevel)) {
+      return false;
+    }
+
+    final bFilterStyles = List<String>.from(b['filterStyles'] ?? ['상관없음']);
+    final aStyle = (a['style'] as String?) ?? '';
+    if (!bFilterStyles.contains('상관없음') && aStyle.isNotEmpty && !bFilterStyles.contains(aStyle)) {
+      return false;
+    }
+
+    final bFilterAges = List<String>.from(b['filterAgeGroups'] ?? ['상관없음']);
+    final aAge = (a['ageGroup'] as String?) ?? '20대';
+    if (!bFilterAges.contains('상관없음') && !bFilterAges.contains(aAge)) {
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> joinMatchQueue({
     required String resortId,
     required String resortName,
     required String shortName,
     required String uid,
     required String nickname,
+    String discipline = '스노보드',
+    String style = '자유 라이딩',
+    String level = '중급',
+    String ageGroup = '20대',
+    bool isCustomMatch = false,
+    String filterDiscipline = '상관없음',
+    List<String> filterStyles = const ['상관없음'],
+    List<String> filterLevels = const ['상관없음'],
+    List<String> filterAgeGroups = const ['상관없음'],
   }) async {
     try {
       // 0-0. ⚡️ 15분 이상 경과한 유령 대기자(비정상 종료 등) 자동 정리
@@ -1049,8 +1149,20 @@ class AppFirebaseService {
         final targetData = targetDoc.data();
         final currentParticipants = List<String>.from(targetData['participantNames'] ?? []);
         final currentUids = List<String>.from(targetData['participantUids'] ?? []);
+        final isRoomCustom = targetData['isCustomMatch'] as bool? ?? false;
+        final roomAgeFilters = List<String>.from(targetData['matchFilterAgeGroups'] ?? []);
 
-        if (!currentUids.contains(uid)) {
+        bool canRefill = true;
+        if (isRoomCustom && roomAgeFilters.isNotEmpty && !roomAgeFilters.contains('상관없음')) {
+          if (!roomAgeFilters.contains(ageGroup)) {
+            canRefill = false;
+          }
+        }
+        if (isCustomMatch && filterAgeGroups.isNotEmpty && !filterAgeGroups.contains('상관없음')) {
+          if (!isRoomCustom) canRefill = false;
+        }
+
+        if (canRefill && !currentUids.contains(uid)) {
           currentParticipants.add(nickname);
           currentUids.add(uid);
           final newCount = currentParticipants.length;
@@ -1109,10 +1221,19 @@ class AppFirebaseService {
       await riderRef.set({
         'uid': uid,
         'nickname': nickname,
+        'discipline': discipline,
+        'style': style,
+        'level': level,
+        'ageGroup': ageGroup,
+        'isCustomMatch': isCustomMatch,
+        'filterDiscipline': filterDiscipline,
+        'filterStyles': filterStyles,
+        'filterLevels': filterLevels,
+        'filterAgeGroups': filterAgeGroups,
         'joinedAt': FieldValue.serverTimestamp(),
       });
 
-      // 3. 큐에 모인 인원 확인 (4명이면 매칭 성사 처리)
+      // 3. 큐에 모인 인원 확인 (상호 호환되는 4인이 모이면 매칭 성사 처리)
       final queueSnap = await _firestore
           .collection('random_match_queues')
           .doc(resortId)
@@ -1120,17 +1241,45 @@ class AppFirebaseService {
           .orderBy('joinedAt', descending: false)
           .get();
 
-      if (queueSnap.docs.length >= 4) {
-        final top4 = queueSnap.docs.take(4).toList();
-        final participantUids = top4.map((d) => d.data()['uid'] as String).toList();
-        final participantNames = top4.map((d) => d.data()['nickname'] as String).toList();
+      final allRiders = queueSnap.docs.map((d) => {...d.data(), '_ref': d.reference}).toList();
+
+      List<Map<String, dynamic>>? matchedParty;
+
+      // 4인 상호 호환 그룹 탐색 (FIFO 우선순위)
+      for (int i = 0; i < allRiders.length; i++) {
+        final group = [allRiders[i]];
+        for (int j = i + 1; j < allRiders.length; j++) {
+          final candidate = allRiders[j];
+          final compatibleWithAll = group.every((member) => _areRidersCompatible(member, candidate));
+          if (compatibleWithAll) {
+            group.add(candidate);
+            if (group.length == 4) {
+              matchedParty = group;
+              break;
+            }
+          }
+        }
+        if (matchedParty != null) break;
+      }
+
+      if (matchedParty != null && matchedParty.length == 4) {
+        final participantUids = matchedParty.map((d) => d['uid'] as String).toList();
+        final participantNames = matchedParty.map((d) => d['nickname'] as String).toList();
+        final hasCustom = matchedParty.any((d) => d['isCustomMatch'] == true);
+        final ageFilters = <String>{};
+        for (final d in matchedParty) {
+          final ages = List<String>.from(d['filterAgeGroups'] ?? []);
+          if (!ages.contains('상관없음')) ageFilters.addAll(ages);
+        }
 
         if (participantUids.contains(uid)) {
           final now = DateTime.now();
           final postId = 'random_match_${now.millisecondsSinceEpoch}';
           final newPost = RidePost(
             id: postId,
-            title: '[⚡️ 4인 슬로프파티] $shortName 실시간 번개',
+            title: hasCustom
+                ? '[🎯 맞춤 4인 파티] $shortName 실시간 번개'
+                : '[⚡️ 4인 슬로프파티] $shortName 실시간 번개',
             content: '$resortName 실시간 4인 슬로프 메이트 대화방입니다. 슬로프에서 만나요!',
             resortName: resortName,
             slopes: ['전체 슬로프 (자유)'],
@@ -1148,6 +1297,8 @@ class AppFirebaseService {
             participantUids: participantUids,
             isJoined: true,
             isAuthor: participantUids.first == uid,
+            isCustomMatch: hasCustom,
+            matchFilterAgeGroups: ageFilters.toList(),
             chatMessages: [
               ChatMessage(
                 sender: '시스템',
@@ -1163,9 +1314,10 @@ class AppFirebaseService {
 
           // 2) 4명 유저의 매칭 상태를 'matched'로 변경 및 큐에서 제거
           final batch = _firestore.batch();
-          for (final d in top4) {
-            final riderUid = d.data()['uid'] as String;
-            batch.delete(d.reference);
+          for (final d in matchedParty) {
+            final riderUid = d['uid'] as String;
+            final ref = d['_ref'] as DocumentReference;
+            batch.delete(ref);
             batch.set(_firestore.collection('user_match_status').doc(riderUid), {
               'status': 'matched',
               'matchedPostId': postId,
@@ -1228,6 +1380,200 @@ class AppFirebaseService {
       debugPrint('🌙 [03:00 세션종료] 전국 스키장 랜덤 매칭 대기열 일괄 플러시 완료');
     } catch (e) {
       debugPrint('flushAllMatchQueues error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> submitReport({
+    required String reporterUid,
+    required String reporterNickname,
+    String? targetUid,
+    required String targetNickname,
+    required String targetType, // 'gathering', 'review', 'snow_comment', 'user'
+    required String targetId,
+    required String category, // 'profanity', 'ad_spam', 'no_show', 'fraud_other'
+    required String categoryName,
+    String contentSnippet = '',
+    String additionalDetails = '',
+  }) async {
+    try {
+      final safeTargetUid = targetUid ?? '';
+      final reportRef = _firestore.collection('reports').doc();
+      final now = DateTime.now();
+
+      // 1. 공정 자동 검증 수행
+      bool isVerified = false;
+      String verificationNote = '';
+
+      if (category == 'profanity') {
+        final detected = ContentFilterService.hasProfanity(contentSnippet) ||
+            ContentFilterService.hasProfanity(additionalDetails);
+        if (detected) {
+          isVerified = true;
+          verificationNote = '비속어/비방 키워드 자동 검출 완료 (1회 즉시 위반 확정)';
+        }
+      } else if (category == 'ad_spam') {
+        final detected = ContentFilterService.hasAdOrSpam(contentSnippet) ||
+            ContentFilterService.hasAdOrSpam(additionalDetails);
+        if (detected) {
+          isVerified = true;
+          verificationNote = '광고/외부링크/연락처 패턴 자동 검출 완료 (1회 즉시 위반 확정)';
+        }
+      }
+
+      // 2. 신고 내역 기록
+      await reportRef.set({
+        'reporterUid': reporterUid,
+        'reporterNickname': reporterNickname,
+        'targetUid': safeTargetUid,
+        'targetNickname': targetNickname,
+        'targetType': targetType,
+        'targetId': targetId,
+        'category': category,
+        'categoryName': categoryName,
+        'contentSnippet': contentSnippet,
+        'additionalDetails': additionalDetails,
+        'isVerified': isVerified,
+        'verificationNote': verificationNote,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // 3. 해당 타겟 콘텐츠의 신고자 목록 및 카운트 갱신
+      if ((targetType == 'gathering' || targetType == 'ride_post') && targetId.isNotEmpty) {
+        final gatheringRef = _firestore.collection('gatherings').doc(targetId);
+        final snap = await gatheringRef.get();
+        if (snap.exists) {
+          final data = snap.data() ?? {};
+          final reportedUsers = List<String>.from(data['reportedUserIds'] ?? []);
+          if (!reportedUsers.contains(reporterUid)) {
+            reportedUsers.add(reporterUid);
+          }
+          final currentReports = reportedUsers.length;
+          final isBlinded = currentReports >= 3 || isVerified;
+          await gatheringRef.update({
+            'reportCount': currentReports,
+            'reportedUserIds': reportedUsers,
+            'isBlinded': isBlinded,
+          });
+        }
+      } else if (targetType == 'review' && targetId.isNotEmpty) {
+        final reviewRef = _firestore.collection('reviews').doc(targetId);
+        final snap = await reviewRef.get();
+        if (snap.exists) {
+          final data = snap.data() ?? {};
+          final reportedUsers = List<String>.from(data['reportedUserIds'] ?? []);
+          if (!reportedUsers.contains(reporterUid)) {
+            reportedUsers.add(reporterUid);
+          }
+          final currentReports = reportedUsers.length;
+          final isBlinded = currentReports >= 3 || isVerified;
+          await reviewRef.update({
+            'reportCount': currentReports,
+            'reportedUserIds': reportedUsers,
+            'isBlinded': isBlinded,
+          });
+        }
+      } else if (targetType == 'snow_comment' && targetId.isNotEmpty) {
+        final commentRef = _firestore.collection('live_snow_comments').doc(targetId);
+        final snap = await commentRef.get();
+        if (snap.exists) {
+          final data = snap.data() ?? {};
+          final reportedUsers = List<String>.from(data['reportedUserIds'] ?? []);
+          if (!reportedUsers.contains(reporterUid)) {
+            reportedUsers.add(reporterUid);
+          }
+          final currentReports = reportedUsers.length;
+          final isBlinded = currentReports >= 3 || isVerified;
+          await commentRef.update({
+            'reportCount': currentReports,
+            'reportedUserIds': reportedUsers,
+            'isBlinded': isBlinded,
+          });
+        }
+      }
+
+      // 4. 피신고자(targetUid)의 누적 신고 및 제재 판정
+      if (safeTargetUid.isNotEmpty && safeTargetUid != 'me' && safeTargetUid != reporterUid) {
+        final userRef = _firestore.collection('users').doc(safeTargetUid);
+        final userSnap = await userRef.get();
+
+        // 과거 해당 카테고리 신고 이력 조회 (다수 신고자 누적 판정)
+        final pastReportsSnap = await _firestore
+            .collection('reports')
+            .where('targetUid', isEqualTo: safeTargetUid)
+            .where('category', isEqualTo: category)
+            .get();
+
+        final uniqueReporters = pastReportsSnap.docs
+            .map((d) => d.data()['reporterUid'] as String?)
+            .whereType<String>()
+            .toSet();
+
+        // 1,2번 카테고리: 1회 기준 (자동 검증 완료 시 즉시 1회, 미검증 시 2인 이상 시 1회)
+        // 3,4번 카테고리: 3회 기준 (3인 이상 누적 시 1회)
+        bool triggerSanction = false;
+        if (category == 'profanity' || category == 'ad_spam') {
+          if (isVerified || uniqueReporters.length >= 2) {
+            triggerSanction = true;
+          }
+        } else if (category == 'no_show' || category == 'fraud_other') {
+          if (uniqueReporters.length >= 3) {
+            triggerSanction = true;
+          }
+        }
+
+        if (triggerSanction && userSnap.exists) {
+          final userData = userSnap.data() ?? {};
+          final currentSanctionCount = (userData['sanctionCount'] as int?) ?? 0;
+          final newSanctionCount = currentSanctionCount + 1;
+
+          DateTime? newSanctionUntil;
+          bool isPermanentlyBanned = false;
+
+          // 1회: 24시간 / 2회: 72시간 / 3회: 144시간 / 4회: 영구 정지
+          if (newSanctionCount == 1) {
+            newSanctionUntil = now.add(const Duration(hours: 24));
+          } else if (newSanctionCount == 2) {
+            newSanctionUntil = now.add(const Duration(hours: 72));
+          } else if (newSanctionCount == 3) {
+            newSanctionUntil = now.add(const Duration(hours: 144));
+          } else {
+            isPermanentlyBanned = true;
+          }
+
+          await userRef.update({
+            'sanctionCount': newSanctionCount,
+            'sanctionUntil': newSanctionUntil != null ? Timestamp.fromDate(newSanctionUntil) : null,
+            'isPermanentlyBanned': isPermanentlyBanned,
+            'sanctionReason': '$categoryName ($newSanctionCount차 제재)',
+            'lastSanctionedAt': FieldValue.serverTimestamp(),
+          });
+
+          // 대상자가 현재 로그인 유저인 경우 즉시 반영
+          if (gCurrentUser != null && gCurrentUser!.id == targetUid) {
+            gCurrentUser!.sanctionCount = newSanctionCount;
+            gCurrentUser!.sanctionUntil = newSanctionUntil;
+            gCurrentUser!.isPermanentlyBanned = isPermanentlyBanned;
+            gCurrentUser!.sanctionReason = '$categoryName ($newSanctionCount차 제재)';
+            notifyCurrentUserChanged();
+          }
+
+          return {
+            'success': true,
+            'isVerified': isVerified,
+            'sanctionApplied': true,
+            'sanctionCount': newSanctionCount,
+          };
+        }
+      }
+
+      return {
+        'success': true,
+        'isVerified': isVerified,
+        'sanctionApplied': false,
+      };
+    } catch (e) {
+      debugPrint('submitReport error: $e');
+      return {'success': false, 'error': e.toString()};
     }
   }
 
@@ -1636,6 +1982,29 @@ class AppFirebaseService {
       });
     } catch (e) {
       debugPrint('Firebase toggleLikeLiveSnowComment error: $e');
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🗑️ 후기 및 한줄평 삭제 기능
+  // -------------------------------------------------------------
+  Future<void> deleteRideReview(String reviewId) async {
+    try {
+      final docRef = _firestore.collection('reviews').doc(reviewId);
+      await docRef.delete();
+      debugPrint('Firebase deleteRideReview success for: $reviewId');
+    } catch (e) {
+      debugPrint('Firebase deleteRideReview error: $e');
+    }
+  }
+
+  Future<void> deleteLiveSnowComment(String commentId) async {
+    try {
+      final docRef = _firestore.collection('live_snow_comments').doc(commentId);
+      await docRef.delete();
+      debugPrint('Firebase deleteLiveSnowComment success for: $commentId');
+    } catch (e) {
+      debugPrint('Firebase deleteLiveSnowComment error: $e');
     }
   }
 

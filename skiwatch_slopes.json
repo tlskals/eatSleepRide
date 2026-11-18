@@ -1,0 +1,1204 @@
+{
+  "곤지암": [
+    {
+      "name": "그램1",
+      "difficulty": "상급",
+      "length": "548 m",
+      "elevation": "171 m",
+      "degree": "17.3 °"
+    },
+    {
+      "name": "그램2",
+      "difficulty": "중급",
+      "length": "828 m",
+      "elevation": "200 m",
+      "degree": "13.6 °"
+    },
+    {
+      "name": "씽큐1",
+      "difficulty": "중상급",
+      "length": "380 m",
+      "elevation": "104 m",
+      "degree": "14.2 °"
+    },
+    {
+      "name": "씽큐2",
+      "difficulty": "초중급",
+      "length": "1,049 m",
+      "elevation": "215 m",
+      "degree": "12.9 °"
+    },
+    {
+      "name": "씽큐3",
+      "difficulty": "중상급",
+      "length": "462 m",
+      "elevation": "117 m",
+      "degree": "14.2 °"
+    },
+    {
+      "name": "씽큐Br",
+      "difficulty": "상급",
+      "length": "204 m",
+      "elevation": "23 m",
+      "degree": "10.9 °"
+    },
+    {
+      "name": "익시오",
+      "difficulty": "초중급",
+      "length": "757 m",
+      "elevation": "119 m",
+      "degree": "10.4 °"
+    },
+    {
+      "name": "휘센",
+      "difficulty": "초급",
+      "length": "497 m",
+      "elevation": "60 m",
+      "degree": "7.0 °"
+    },
+    {
+      "name": "CNP1",
+      "difficulty": "초중급",
+      "length": "549 m",
+      "elevation": "98 m",
+      "degree": "10.9 °"
+    },
+    {
+      "name": "CNP2",
+      "difficulty": "상급",
+      "length": "1,087 m",
+      "elevation": "239 m",
+      "degree": "14.0 °"
+    }
+  ],
+  "무주": [
+    {
+      "name": "레이더스 상단",
+      "difficulty": "최상급",
+      "length": "480 m",
+      "elevation": "250 m",
+      "degree": "21.3 °"
+    },
+    {
+      "name": "레이더스 하단",
+      "difficulty": "상급",
+      "length": "473 m",
+      "elevation": "85 m",
+      "degree": "17.1 °"
+    },
+    {
+      "name": "루키힐",
+      "difficulty": "중급",
+      "length": "721 m",
+      "elevation": "150 m",
+      "degree": "12.0 °"
+    },
+    {
+      "name": "모차르트",
+      "difficulty": "최상급",
+      "length": "520 m",
+      "elevation": "90 m",
+      "degree": "21.4 °"
+    },
+    {
+      "name": "미뉴에트",
+      "difficulty": "상급",
+      "length": "1,339 m",
+      "elevation": "398 m",
+      "degree": "17.0 °"
+    },
+    {
+      "name": "서역기행",
+      "difficulty": "초급",
+      "length": "3,413 m",
+      "elevation": "332 m",
+      "degree": "7.8 °"
+    },
+    {
+      "name": "스피츠 하단",
+      "difficulty": "초급",
+      "length": "720 m",
+      "elevation": "128 m",
+      "degree": "10.0 °"
+    },
+    {
+      "name": "실크로드 상단",
+      "difficulty": "중급",
+      "length": "4,386 m",
+      "elevation": "473 m",
+      "degree": "8.3 °"
+    },
+    {
+      "name": "실크로드 하단",
+      "difficulty": "중급",
+      "length": "1,714 m",
+      "elevation": "302 m",
+      "degree": "10.1 °"
+    },
+    {
+      "name": "썬다운",
+      "difficulty": "중급",
+      "length": "577 m",
+      "elevation": "74 m",
+      "degree": "15.4 °"
+    },
+    {
+      "name": "알레그로",
+      "difficulty": "최상급",
+      "length": "467 m",
+      "elevation": "171 m",
+      "degree": "20.8 °"
+    },
+    {
+      "name": "야마가",
+      "difficulty": "상급",
+      "length": "1,039 m",
+      "elevation": "267 m",
+      "degree": "14.8 °"
+    },
+    {
+      "name": "왈츠",
+      "difficulty": "최상급",
+      "length": "111 m",
+      "elevation": "14 m",
+      "degree": "7.2 °"
+    },
+    {
+      "name": "웨스턴",
+      "difficulty": "중급",
+      "length": "305 m",
+      "elevation": "50 m",
+      "degree": "9.5 °"
+    },
+    {
+      "name": "이스턴",
+      "difficulty": "초급",
+      "length": "374 m",
+      "elevation": "63 m",
+      "degree": "10.1 °"
+    },
+    {
+      "name": "카덴자",
+      "difficulty": "최상급",
+      "length": "252 m",
+      "elevation": "72 m",
+      "degree": "16.4 °"
+    },
+    {
+      "name": "커넥션",
+      "difficulty": "중급",
+      "length": "1,078 m",
+      "elevation": "157 m",
+      "degree": "11.8 °"
+    },
+    {
+      "name": "터보",
+      "difficulty": "중급",
+      "length": "1,430 m",
+      "elevation": "265 m",
+      "degree": "10.6 °"
+    },
+    {
+      "name": "파노라마",
+      "difficulty": "상급",
+      "length": "737 m",
+      "elevation": "178 m",
+      "degree": "13.9 °"
+    },
+    {
+      "name": "폴카",
+      "difficulty": "최상급",
+      "length": "428 m",
+      "elevation": "158 m",
+      "degree": "21.0 °"
+    },
+    {
+      "name": "프리웨이",
+      "difficulty": "상급",
+      "length": "879 m",
+      "elevation": "199 m",
+      "degree": "13.0 °"
+    }
+  ],
+  "비발디파크": [
+    {
+      "name": "락",
+      "difficulty": "최상급",
+      "length": "610 m",
+      "elevation": "—",
+      "degree": "21.0 °"
+    },
+    {
+      "name": "레게",
+      "difficulty": "중상급",
+      "length": "570 m",
+      "elevation": "—",
+      "degree": "14.0 °"
+    },
+    {
+      "name": "발라드",
+      "difficulty": "초급",
+      "length": "508 m",
+      "elevation": "—",
+      "degree": "8.0 °"
+    },
+    {
+      "name": "블루스",
+      "difficulty": "초급",
+      "length": "365 m",
+      "elevation": "—",
+      "degree": "4.0 °"
+    },
+    {
+      "name": "재즈",
+      "difficulty": "중급",
+      "length": "900 m",
+      "elevation": "—",
+      "degree": "12.0 °"
+    },
+    {
+      "name": "클래식",
+      "difficulty": "중상급",
+      "length": "450 m",
+      "elevation": "—",
+      "degree": "12.0 °"
+    },
+    {
+      "name": "테크노 1",
+      "difficulty": "중상급",
+      "length": "480 m",
+      "elevation": "—",
+      "degree": "11.0 °"
+    },
+    {
+      "name": "테크노 2",
+      "difficulty": "상급",
+      "length": "680 m",
+      "elevation": "—",
+      "degree": "17.0 °"
+    },
+    {
+      "name": "펑키",
+      "difficulty": "중상급",
+      "length": "575 m",
+      "elevation": "—",
+      "degree": "16.0 °"
+    },
+    {
+      "name": "힙합 1",
+      "difficulty": "중상급",
+      "length": "240 m",
+      "elevation": "—",
+      "degree": "11.0 °"
+    },
+    {
+      "name": "힙합 2",
+      "difficulty": "중상급",
+      "length": "620 m",
+      "elevation": "—",
+      "degree": "15.0 °"
+    }
+  ],
+  "알펜시아": [
+    {
+      "name": "델타",
+      "difficulty": "상급",
+      "length": "634 m",
+      "elevation": "170 m",
+      "degree": "9.4 °"
+    },
+    {
+      "name": "브라보",
+      "difficulty": "중급",
+      "length": "1,351 m",
+      "elevation": "194 m",
+      "degree": "4.9 °"
+    },
+    {
+      "name": "알파",
+      "difficulty": "초급",
+      "length": "648 m",
+      "elevation": "78 m",
+      "degree": "3.9 °"
+    },
+    {
+      "name": "에코",
+      "difficulty": "상급",
+      "length": "762 m",
+      "elevation": "194 m",
+      "degree": "9.0 °"
+    },
+    {
+      "name": "찰리",
+      "difficulty": "최상급",
+      "length": "374 m",
+      "elevation": "194 m",
+      "degree": "11.9 °"
+    },
+    {
+      "name": "폭스트롯",
+      "difficulty": "최상급",
+      "length": "826 m",
+      "elevation": "194 m",
+      "degree": "8.2 °"
+    }
+  ],
+  "에덴밸리": [
+    {
+      "name": "머큐리",
+      "difficulty": "상급",
+      "length": "949 m",
+      "elevation": "—",
+      "degree": "15.1 °"
+    },
+    {
+      "name": "메인",
+      "difficulty": "초급",
+      "length": "454 m",
+      "elevation": "—",
+      "degree": "5.7 °"
+    },
+    {
+      "name": "베이직",
+      "difficulty": "초급",
+      "length": "587 m",
+      "elevation": "—",
+      "degree": "6.8 °"
+    },
+    {
+      "name": "비너스",
+      "difficulty": "상급",
+      "length": "862 m",
+      "elevation": "—",
+      "degree": "16.7 °"
+    },
+    {
+      "name": "새턴",
+      "difficulty": "중급",
+      "length": "851 m",
+      "elevation": "—",
+      "degree": "12.4 °"
+    },
+    {
+      "name": "우라누스",
+      "difficulty": "중급",
+      "length": "1,495 m",
+      "elevation": "—",
+      "degree": "9.1 °"
+    },
+    {
+      "name": "쥬피터",
+      "difficulty": "중급",
+      "length": "1,023 m",
+      "elevation": "—",
+      "degree": "9.6 °"
+    }
+  ],
+  "엘리시안 강촌": [
+    {
+      "name": "드래곤/래빗",
+      "difficulty": "중급",
+      "length": "1,500 m",
+      "elevation": "165 m",
+      "degree": "—"
+    },
+    {
+      "name": "디어",
+      "difficulty": "중급",
+      "length": "945 m",
+      "elevation": "172 m",
+      "degree": "—"
+    },
+    {
+      "name": "래빗",
+      "difficulty": "초급",
+      "length": "436 m",
+      "elevation": "34 m",
+      "degree": "—"
+    },
+    {
+      "name": "레퍼드",
+      "difficulty": "상급",
+      "length": "518 m",
+      "elevation": "124 m",
+      "degree": "—"
+    },
+    {
+      "name": "재규어",
+      "difficulty": "상급",
+      "length": "524 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "팬더",
+      "difficulty": "초급",
+      "length": "306 m",
+      "elevation": "21 m",
+      "degree": "5.1 °"
+    },
+    {
+      "name": "퓨마",
+      "difficulty": "중급",
+      "length": "1,175 m",
+      "elevation": "120 m",
+      "degree": "—"
+    },
+    {
+      "name": "호스/제브라",
+      "difficulty": "중급",
+      "length": "1,032 m",
+      "elevation": "165 m",
+      "degree": "—"
+    },
+    {
+      "name": "호스/페가수스",
+      "difficulty": "중급",
+      "length": "1,045 m",
+      "elevation": "172 m",
+      "degree": "—"
+    }
+  ],
+  "오크밸리": [
+    {
+      "name": "A",
+      "difficulty": "중급",
+      "length": "1,610 m",
+      "elevation": "262 m",
+      "degree": "9.1 °"
+    },
+    {
+      "name": "B",
+      "difficulty": "상급",
+      "length": "885 m",
+      "elevation": "205 m",
+      "degree": "13.0 °"
+    },
+    {
+      "name": "C",
+      "difficulty": "상급",
+      "length": "375 m",
+      "elevation": "197 m",
+      "degree": "17.7 °"
+    },
+    {
+      "name": "D",
+      "difficulty": "중급",
+      "length": "885 m",
+      "elevation": "230 m",
+      "degree": "16.2 °"
+    },
+    {
+      "name": "D-1",
+      "difficulty": "중급",
+      "length": "240 m",
+      "elevation": "94 m",
+      "degree": "15.1 °"
+    },
+    {
+      "name": "E",
+      "difficulty": "중급",
+      "length": "485 m",
+      "elevation": "120 m",
+      "degree": "11.3 °"
+    },
+    {
+      "name": "F",
+      "difficulty": "중급",
+      "length": "604 m",
+      "elevation": "143 m",
+      "degree": "14.0 °"
+    },
+    {
+      "name": "G",
+      "difficulty": "중급",
+      "length": "724 m",
+      "elevation": "171 m",
+      "degree": "10.8 °"
+    },
+    {
+      "name": "H",
+      "difficulty": "초급",
+      "length": "625 m",
+      "elevation": "99 m",
+      "degree": "6.3 °"
+    },
+    {
+      "name": "I",
+      "difficulty": "초급",
+      "length": "550 m",
+      "elevation": "49 m",
+      "degree": "5.1 °"
+    }
+  ],
+  "오투": [
+    {
+      "name": "글로리1",
+      "difficulty": "상급",
+      "length": "561 m",
+      "elevation": "172 m",
+      "degree": "17.2 °"
+    },
+    {
+      "name": "글로리2",
+      "difficulty": "상급",
+      "length": "628 m",
+      "elevation": "172 m",
+      "degree": "15.1 °"
+    },
+    {
+      "name": "글로리3",
+      "difficulty": "상급",
+      "length": "3,256 m",
+      "elevation": "526 m",
+      "degree": "10.8 °"
+    },
+    {
+      "name": "드림1",
+      "difficulty": "초급",
+      "length": "556 m",
+      "elevation": "51 m",
+      "degree": "5.1 °"
+    },
+    {
+      "name": "드림2",
+      "difficulty": "초급",
+      "length": "963 m",
+      "elevation": "112 m",
+      "degree": "6.8 °"
+    },
+    {
+      "name": "첼린지1",
+      "difficulty": "최상급",
+      "length": "582 m",
+      "elevation": "225 m",
+      "degree": "17.7 °"
+    },
+    {
+      "name": "첼린지2",
+      "difficulty": "최상급",
+      "length": "807 m",
+      "elevation": "369 m",
+      "degree": "22.3 °"
+    },
+    {
+      "name": "첼린지3",
+      "difficulty": "최상급",
+      "length": "753 m",
+      "elevation": "37 m",
+      "degree": "21.8 °"
+    },
+    {
+      "name": "패션1",
+      "difficulty": "최상급",
+      "length": "1,057 m",
+      "elevation": "380 m",
+      "degree": "19.8 °"
+    },
+    {
+      "name": "패션2",
+      "difficulty": "최상급",
+      "length": "735 m",
+      "elevation": "234 m",
+      "degree": "17.7 °"
+    },
+    {
+      "name": "하프파이프",
+      "difficulty": "파크",
+      "length": "345 m",
+      "elevation": "82 m",
+      "degree": "13.5 °"
+    },
+    {
+      "name": "해피",
+      "difficulty": "중급",
+      "length": "2,144 m",
+      "elevation": "388 m",
+      "degree": "10.2 °"
+    },
+    {
+      "name": "헤드",
+      "difficulty": "중급",
+      "length": "1,155 m",
+      "elevation": "178 m",
+      "degree": "8.5 °"
+    }
+  ],
+  "용평": [
+    {
+      "name": "골드 환타스틱",
+      "difficulty": "중상급",
+      "length": "1,850 m",
+      "elevation": "333 m",
+      "degree": "10.2 °"
+    },
+    {
+      "name": "골드밸리",
+      "difficulty": "상급",
+      "length": "1,850 m",
+      "elevation": "333 m",
+      "degree": "11.3 °"
+    },
+    {
+      "name": "골드파라다이스",
+      "difficulty": "중급",
+      "length": "1,520 m",
+      "elevation": "222 m",
+      "degree": "8.0 °"
+    },
+    {
+      "name": "뉴골드",
+      "difficulty": "최상급",
+      "length": "650 m",
+      "elevation": "180 m",
+      "degree": "17.2 °"
+    },
+    {
+      "name": "뉴레드",
+      "difficulty": "상급",
+      "length": "500 m",
+      "elevation": "194 m",
+      "degree": "19.8 °"
+    },
+    {
+      "name": "뉴옐로우",
+      "difficulty": "초급",
+      "length": "350 m",
+      "elevation": "60 m",
+      "degree": "6.3 °"
+    },
+    {
+      "name": "드래곤파크",
+      "difficulty": "파크",
+      "length": "1,046 m",
+      "elevation": "500 m",
+      "degree": "18.3 °"
+    },
+    {
+      "name": "레드",
+      "difficulty": "최상급",
+      "length": "1,000 m",
+      "elevation": "194 m",
+      "degree": "11.9 °"
+    },
+    {
+      "name": "레드파라다이스",
+      "difficulty": "중급",
+      "length": "1,000 m",
+      "elevation": "150 m",
+      "degree": "12.4 °"
+    },
+    {
+      "name": "레인보우 1",
+      "difficulty": "최상급",
+      "length": "1,607 m",
+      "elevation": "500 m",
+      "degree": "17.2 °"
+    },
+    {
+      "name": "레인보우 2",
+      "difficulty": "최상급",
+      "length": "752 m",
+      "elevation": "500 m",
+      "degree": "21.3 °"
+    },
+    {
+      "name": "레인보우 3",
+      "difficulty": "최상급",
+      "length": "1,046 m",
+      "elevation": "500 m",
+      "degree": "18.3 °"
+    },
+    {
+      "name": "레인보우 4",
+      "difficulty": "상급",
+      "length": "635 m",
+      "elevation": "180 m",
+      "degree": "15.6 °"
+    },
+    {
+      "name": "레인보우파라다이스",
+      "difficulty": "중급",
+      "length": "5,600 m",
+      "elevation": "702 m",
+      "degree": "7.4 °"
+    },
+    {
+      "name": "메가그린",
+      "difficulty": "초중급",
+      "length": "1,000 m",
+      "elevation": "108 m",
+      "degree": "8.5 °"
+    },
+    {
+      "name": "블루",
+      "difficulty": "상급",
+      "length": "300 m",
+      "elevation": "80 m",
+      "degree": "16.2 °"
+    },
+    {
+      "name": "실버",
+      "difficulty": "최상급",
+      "length": "1,000 m",
+      "elevation": "263 m",
+      "degree": "16.2 °"
+    },
+    {
+      "name": "실버파라다이스",
+      "difficulty": "중급",
+      "length": "1,460 m",
+      "elevation": "269 m",
+      "degree": "10.2 °"
+    },
+    {
+      "name": "옐로우",
+      "difficulty": "초급",
+      "length": "600 m",
+      "elevation": "61 m",
+      "degree": "6.8 °"
+    },
+    {
+      "name": "핑크",
+      "difficulty": "초중급",
+      "length": "600 m",
+      "elevation": "91 m",
+      "degree": "8.0 °"
+    }
+  ],
+  "웰리힐리파크": [
+    {
+      "name": "A1",
+      "difficulty": "파크",
+      "length": "450 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "A2",
+      "difficulty": "초급",
+      "length": "598 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "A3",
+      "difficulty": "파크",
+      "length": "539 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "B1",
+      "difficulty": "중급",
+      "length": "1,112 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "B2",
+      "difficulty": "중급",
+      "length": "1,038 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "C1",
+      "difficulty": "상급",
+      "length": "370 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "C2",
+      "difficulty": "상급",
+      "length": "275 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "C3",
+      "difficulty": "최상급",
+      "length": "504 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "C4",
+      "difficulty": "상급",
+      "length": "827 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "C5",
+      "difficulty": "상급",
+      "length": "661 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "D+",
+      "difficulty": "중급",
+      "length": "1,000 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "D1",
+      "difficulty": "초급",
+      "length": "620 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "D2",
+      "difficulty": "파크",
+      "length": "150 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "E1",
+      "difficulty": "최상급",
+      "length": "625 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "E2",
+      "difficulty": "상급",
+      "length": "650 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "E3",
+      "difficulty": "최상급",
+      "length": "321 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "S1",
+      "difficulty": "중급",
+      "length": "1,786 m",
+      "elevation": "—",
+      "degree": "—"
+    },
+    {
+      "name": "S2",
+      "difficulty": "초급",
+      "length": "814 m",
+      "elevation": "—",
+      "degree": "—"
+    }
+  ],
+  "지산": [
+    {
+      "name": "1",
+      "difficulty": "초급",
+      "length": "300 m",
+      "elevation": "44 m",
+      "degree": "7.0 °"
+    },
+    {
+      "name": "1-1",
+      "difficulty": "초급",
+      "length": "300 m",
+      "elevation": "42 m",
+      "degree": "5.0 °"
+    },
+    {
+      "name": "2",
+      "difficulty": "중급",
+      "length": "700 m",
+      "elevation": "145 m",
+      "degree": "9.0 °"
+    },
+    {
+      "name": "3",
+      "difficulty": "중급",
+      "length": "720 m",
+      "elevation": "145 m",
+      "degree": "9.0 °"
+    },
+    {
+      "name": "5",
+      "difficulty": "상급",
+      "length": "870 m",
+      "elevation": "209 m",
+      "degree": "21.0 °"
+    },
+    {
+      "name": "6",
+      "difficulty": "최상급",
+      "length": "900 m",
+      "elevation": "209 m",
+      "degree": "24.0 °"
+    },
+    {
+      "name": "7",
+      "difficulty": "중상급",
+      "length": "1,200 m",
+      "elevation": "177 m",
+      "degree": "13.0 °"
+    }
+  ],
+  "하이원": [
+    {
+      "name": "빅토리아 1",
+      "difficulty": "상급",
+      "length": "1,439 m",
+      "elevation": "379 m",
+      "degree": "15.6 °"
+    },
+    {
+      "name": "빅토리아 2",
+      "difficulty": "상급",
+      "length": "1,382 m",
+      "elevation": "269 m",
+      "degree": "18.7 °"
+    },
+    {
+      "name": "빅토리아 3",
+      "difficulty": "최상급",
+      "length": "1,311 m",
+      "elevation": "376 m",
+      "degree": "17.0 °"
+    },
+    {
+      "name": "아테나 2",
+      "difficulty": "중급",
+      "length": "1,666 m",
+      "elevation": "312 m",
+      "degree": "10.7 °"
+    },
+    {
+      "name": "아테나 3",
+      "difficulty": "초급",
+      "length": "1,862 m",
+      "elevation": "228 m",
+      "degree": "7.3 °"
+    },
+    {
+      "name": "아테나 3-1",
+      "difficulty": "초급",
+      "length": "1,162 m",
+      "elevation": "138 m",
+      "degree": "6.8 °"
+    },
+    {
+      "name": "아폴로 1",
+      "difficulty": "상급",
+      "length": "1,506 m",
+      "elevation": "349 m",
+      "degree": "11.3 °"
+    },
+    {
+      "name": "아폴로 2",
+      "difficulty": "상급",
+      "length": "863 m",
+      "elevation": "161 m",
+      "degree": "20.3 °"
+    },
+    {
+      "name": "아폴로 3",
+      "difficulty": "상급",
+      "length": "754 m",
+      "elevation": "121 m",
+      "degree": "15.8 °"
+    },
+    {
+      "name": "아폴로 4",
+      "difficulty": "상급",
+      "length": "1,569 m",
+      "elevation": "410 m",
+      "degree": "15.4 °"
+    },
+    {
+      "name": "아폴로 5",
+      "difficulty": "최상급",
+      "length": "1,239 m",
+      "elevation": "266 m",
+      "degree": "22.1 °"
+    },
+    {
+      "name": "아폴로 6",
+      "difficulty": "상급",
+      "length": "1,543 m",
+      "elevation": "193 m",
+      "degree": "18.0 °"
+    },
+    {
+      "name": "제우스 1",
+      "difficulty": "초급",
+      "length": "2,328 m",
+      "elevation": "370 m",
+      "degree": "9.5 °"
+    },
+    {
+      "name": "제우스 2",
+      "difficulty": "초급",
+      "length": "2,198 m",
+      "elevation": "96 m",
+      "degree": "7.5 °"
+    },
+    {
+      "name": "제우스 3",
+      "difficulty": "초급",
+      "length": "1,835 m",
+      "elevation": "273 m",
+      "degree": "8.7 °"
+    },
+    {
+      "name": "제우스 3-1",
+      "difficulty": "초급",
+      "length": "1,023 m",
+      "elevation": "121 m",
+      "degree": "6.8 °"
+    },
+    {
+      "name": "헤라 1",
+      "difficulty": "중급",
+      "length": "1,508 m",
+      "elevation": "197 m",
+      "degree": "14.9 °"
+    },
+    {
+      "name": "헤라 2",
+      "difficulty": "중상급",
+      "length": "1,301 m",
+      "elevation": "295 m",
+      "degree": "17.4 °"
+    },
+    {
+      "name": "헤라 3",
+      "difficulty": "상급",
+      "length": "1,278 m",
+      "elevation": "262 m",
+      "degree": "19.8 °"
+    }
+  ],
+  "휘닉스파크": [
+    {
+      "name": "도도(강습전용)",
+      "difficulty": "초급",
+      "length": "350 m",
+      "elevation": "41 m",
+      "degree": "6.7 °"
+    },
+    {
+      "name": "듀크(이상호)",
+      "difficulty": "중상급",
+      "length": "818 m",
+      "elevation": "216 m",
+      "degree": "13.8 °"
+    },
+    {
+      "name": "디지",
+      "difficulty": "최상급",
+      "length": "866 m",
+      "elevation": "239 m",
+      "degree": "15.4 °"
+    },
+    {
+      "name": "모글",
+      "difficulty": "최상급",
+      "length": "319 m",
+      "elevation": "110 m",
+      "degree": "19.0 °"
+    },
+    {
+      "name": "밸리",
+      "difficulty": "중상급",
+      "length": "1,110 m",
+      "elevation": "294 m",
+      "degree": "15.4 °"
+    },
+    {
+      "name": "스패로우",
+      "difficulty": "초급",
+      "length": "978 m",
+      "elevation": "120 m",
+      "degree": "7.0 °"
+    },
+    {
+      "name": "슬로프스타일(SS/SBS)",
+      "difficulty": "중상급",
+      "length": "602 m",
+      "elevation": "161 m",
+      "degree": "14.9 °"
+    },
+    {
+      "name": "익스트림파크(상단)",
+      "difficulty": "파크",
+      "length": "765 m",
+      "elevation": "126 m",
+      "degree": "9.3 °"
+    },
+    {
+      "name": "익스트림파크(하단)",
+      "difficulty": "파크",
+      "length": "765 m",
+      "elevation": "126 m",
+      "degree": "9.3 °"
+    },
+    {
+      "name": "챔피온",
+      "difficulty": "상급",
+      "length": "960 m",
+      "elevation": "277 m",
+      "degree": "16.1 °"
+    },
+    {
+      "name": "키위",
+      "difficulty": "중급",
+      "length": "550 m",
+      "elevation": "128 m",
+      "degree": "13.0 °"
+    },
+    {
+      "name": "파노라마",
+      "difficulty": "중급",
+      "length": "1,450 m",
+      "elevation": "390 m",
+      "degree": "10.0 °"
+    },
+    {
+      "name": "파라다이스",
+      "difficulty": "최상급",
+      "length": "912 m",
+      "elevation": "256 m",
+      "degree": "15.7 °"
+    },
+    {
+      "name": "펭귄",
+      "difficulty": "초급",
+      "length": "665 m",
+      "elevation": "94 m",
+      "degree": "8.3 °"
+    },
+    {
+      "name": "하프파이프",
+      "difficulty": "파크",
+      "length": "168 m",
+      "elevation": "51 m",
+      "degree": "16.7 °"
+    },
+    {
+      "name": "호크",
+      "difficulty": "중급",
+      "length": "643 m",
+      "elevation": "128 m",
+      "degree": "11.3 °"
+    },
+    {
+      "name": "환타지",
+      "difficulty": "상급",
+      "length": "503 m",
+      "elevation": "90 m",
+      "degree": "10.1 °"
+    }
+  ]
+}
